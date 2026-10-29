@@ -141,7 +141,7 @@
   .eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; padding: 6px 9px; font-size: 1rem; }
   .eye.on { background: #e9eef5; }
   .err { color: #a62d36; font-size: .85rem; min-height: 1.2em; margin: 4px 0 10px; }
-  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .88rem; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60; }
+  .toast { max-width: calc(100% - 32px); text-align: center; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .88rem; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60; }
   .toast.show { opacity: 1; }
 
   @media (max-width: 860px) { .months { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -259,6 +259,7 @@
   };
   const FB_VERSION = "10.12.2";
   const FB_ON = !!FIREBASE_CONFIG.apiKey;
+  let userEmail = "";
   let fb = null;          // { auth, db, ref, setDoc, signIn, signOut, serverTimestamp }
   let lastSynced = "";    // última versão vinda/enviada ao Firestore
   // ============================================
@@ -366,7 +367,13 @@
       lastSynced = data;
       await fb.setDoc(fb.ref, { data, updatedBy: user, updatedAt: fb.serverTimestamp() });
       setSync("ok");
-    } catch (e) { setSync("error", e.code || e.message); toast("Não foi possível salvar no Firebase"); }
+    } catch (e) {
+      const c = e.code || "";
+      const msg = /permission-denied/.test(c) ? "sem permissão — confira as regras do Firestore e o e-mail do usuário"
+        : /not-found|failed-precondition/.test(c) ? "banco Firestore não encontrado — crie o banco de dados"
+        : /unavailable/.test(c) ? "sem conexão com o Firebase" : (c || e.message);
+      lastSynced = ""; setSync("error", msg); toast("Não foi possível salvar: " + msg);
+    }
   }
   async function initFirebase() {
     setSync("loading");
@@ -378,6 +385,7 @@
       fb = { auth, db, ref: fsM.doc(db, "escala", "config"), setDoc: fsM.setDoc, serverTimestamp: fsM.serverTimestamp,
         signIn: (e, p) => authM.signInWithEmailAndPassword(auth, e, p), signOut: () => authM.signOut(auth) };
       authM.onAuthStateChanged(auth, u => {
+        userEmail = u ? u.email : "";
         user = u ? (Object.keys(USER_EMAILS).find(k => USER_EMAILS[k] === u.email) || u.email.split("@")[0]) : null;
         renderUser(); renderViews(); renderConfig();
       });
@@ -651,7 +659,7 @@
     const hols = [...cfg.holidays].sort((a, b) => a.date.localeCompare(b.date));
     $("configPanel").innerHTML = `
       <h2>Configurar escala</h2>
-      <p class="lead">Conectado como <b>${esc(user)}</b>. ${FB_ON ? "As alterações são salvas automaticamente no Firebase e aparecem para toda a equipe." : "As alterações são salvas automaticamente neste navegador."}</p>
+      <p class="lead">Conectado como <b>${esc(user)}</b>${userEmail ? ` (${esc(userEmail)})` : ""}. ${FB_ON ? "As alterações são salvas automaticamente no Firebase e aparecem para toda a equipe." : "As alterações são salvas automaticamente neste navegador."}</p>
 
       <div class="sect" style="border:0;margin-top:0;padding-top:0">
         <h3>Colaboradores</h3>
