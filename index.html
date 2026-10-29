@@ -77,8 +77,9 @@
   .dhead { text-align: center; font-weight: 800; font-size: .82rem; padding: 5px; border-bottom: 1px solid #e3e9f1; }
   .wk-days .dhead:not(:first-child) { border-top: 1.5px solid #8796a8; }
   .ln { display: flex; justify-content: space-between; gap: 6px; padding: 4px 10px; font-size: .8rem; }
-  .ln span { color: var(--muted); white-space: nowrap; }
-  .ln b { text-align: right; overflow: hidden; text-overflow: ellipsis; }
+  .ln span { color: var(--muted); }
+  .ln b { text-align: right; flex-shrink: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+  .ln span { min-width: 0; overflow-wrap: anywhere; }
   .ln.hol { background: #fff4e0; } .ln.hol span { color: #8a5a00; font-weight: 800; }
   .wk-on { display: flex; flex-direction: column; }
   .on-h { background: #f28b8b; color: #5c0d12; font-weight: 800; font-size: .74rem; text-align: center; padding: 6px 4px; }
@@ -89,6 +90,9 @@
   .wk.clickable:hover .wk-title { background: #c9d8ec; }
   .chip { border-radius: 6px; padding: 3px 7px; font-size: .74rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .chol { background: #fff0d1; color: #8a5a00; }
+  .cvac { background: #ffe3ef; color: #9a1f5c; }
+  .ln.acion { background: #fff5f8; } .ln.acion span { white-space: normal; color: #9a1f5c; }
+  .flag.vacflag { color: #9a1f5c; }
   .cal td.holiday { background: #fffaf0; }
   .group-edit { border: 1px dashed #c9d4e1; border-radius: 10px; padding: 10px; margin-top: 12px; background: #fff; }
   .flag { font-size: .68rem; color: #a26b00; font-weight: 800; }
@@ -269,6 +273,12 @@
       { date: "2026-09-28", group: "plantao", order: [2, 4, 3] }   // 03/out: Gabriel tarde, Heitor plantão, Felipe folga
     ],
     fix1: true, fix2: true,
+    vacations: [],  // [{ person, start, end }]
+    // Escala usada no grupo do plantão enquanto alguém dele está de férias (revezam só os presentes)
+    vacationSlots: [
+      { name: "Plantonista (férias)", sat: "8h às 12h", after: "Após 12h01: acionamento", sun: "Sobreaviso (acionamento)", oncall: true },
+      { name: "Folga", sat: "", after: "", sun: "", oncall: false }
+    ],
     overrides: {},  // { "AAAA-MM-DD": { grupo: order } }
     holidays: [
       { date: "2026-01-01", name: "Confraternização Universal" }, { date: "2026-02-16", name: "Carnaval" }, { date: "2026-02-17", name: "Carnaval" },
@@ -359,22 +369,53 @@
     const w = weeksBetween(parse(a.date), monday);
     return base.map((_, s) => base[mod(s - w, n)]);
   }
+  // Conta como férias na semana quando o período cobre o sábado ou o domingo
+  const vacationsInWeek = monday => { const a = iso(addDays(monday, 5)), b = iso(addDays(monday, 6)); return cfg.vacations.filter(v => v.start <= b && v.end >= a); };
+  const awayIn = monday => vacationsInWeek(monday).map(v => v.person);
   // Monta a semana: lista de atribuições {slot, person, group}
   function week(monday) {
     const sat = addDays(monday, 5), sun = addDays(monday, 6);
     const reg = regimeFor(sat);
     const key = iso(monday);
-    const items = [];
+    const items = [], groupsView = [];
+    const away = awayIn(monday);
     reg.groups.forEach(g => {
-      const order = groupOrder(g.id, g.slots.length, monday);
-      g.slots.forEach((sl, s) => items.push({ slot: sl, person: order[s], group: g, pos: s }));
+      const n = g.slots.length;
+      const order = groupOrder(g.id, n, monday);
+      const oi = g.slots.findIndex(s => s.oncall);
+      const gAway = order.filter(p => away.includes(p));
+      if (oi >= 0 && gAway.length && gAway.length < n) {
+        // Modo férias: revezam só os presentes, um de sobreaviso e o outro de folga
+        const vkey = g.id + ":ferias";
+        let vorder;
+        const ov = cfg.overrides[key] && cfg.overrides[key][vkey];
+        const present = order.filter(p => !away.includes(p));
+        if (ov && ov.length === present.length && ov.every(p => present.includes(p))) vorder = ov;
+        else {
+          let first = monday, k = 0;
+          for (; k < 104; k++) { const prev = addDays(first, -7); const pa = awayIn(prev); if (!groupOrder(g.id, n, prev).some(p => pa.includes(p))) break; first = prev; }
+          const fo = groupOrder(g.id, n, first);
+          const prio = [oi, mod(oi - 1, n)].concat([...Array(n).keys()].filter(s => s !== oi && s !== mod(oi - 1, n))).map(s => fo[s]);
+          const ranked = prio.filter(p => present.includes(p)).concat(present.filter(p => !prio.includes(p)));
+          const on = ranked[k % ranked.length];
+          vorder = [on].concat(ranked.filter(p => p !== on));
+        }
+        const vs = cfg.vacationSlots;
+        const slots = vorder.map((_, i) => vs[Math.min(i, vs.length - 1)]);
+        vorder.forEach((p, i) => items.push({ slot: slots[i], person: p, group: g, pos: i, vac: true }));
+        groupsView.push({ key: vkey, name: g.name + " — férias (" + gAway.map(pname).join(", ") + ")", slots, order: vorder, vac: true });
+      } else {
+        g.slots.forEach((sl, s) => items.push({ slot: sl, person: order[s], group: g, pos: s }));
+        groupsView.push({ key: g.id, name: g.name, slots: g.slots, order, vac: false });
+      }
     });
     const oncall = items.filter(x => x.slot.oncall);
     const satH = holidayOf(sat), sunH = holidayOf(sun);
     const satWork = satH ? [] : items.filter(x => x.slot.sat).sort((a, b) => a.slot.sat.localeCompare(b.slot.sat, "pt-BR", { numeric: true }));
     const sunWork = sunH ? [] : items.filter(x => x.slot.sun);
     const off = items.filter(x => !x.slot.sat && !x.slot.sun && !x.slot.oncall);
-    return { monday, sat, sun, reg, key, items, oncall, satH, sunH, satWork, sunWork, off, overridden: !!cfg.overrides[key] };
+    const onVac = away.filter(p => !items.some(x => x.person === p));
+    return { monday, sat, sun, reg, key, items, groupsView, oncall, satH, sunH, satWork, sunWork, off, onVac, overridden: !!cfg.overrides[key] };
   }
   const oncallNames = w => w.oncall.map(x => pname(x.person)).join(" / ") || "—";
   function weeksOfYear(y) {
@@ -389,7 +430,7 @@
   function renderNow() {
     const cur = week(mondayOf(today));
     const nxt = week(addDays(cur.monday, 7));
-    const nextRole = p => { const it = nxt.items.find(x => x.person === p); return it ? it.slot.name : "Fora da escala"; };
+    const nextRole = p => { const it = nxt.items.find(x => x.person === p); return it ? it.slot.name : nxt.onVac.includes(p) ? "Férias" : "Fora da escala"; };
     const working = cur.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall)
       .sort((a, b) => (a.slot.oncall - b.slot.oncall) || (a.slot.sat || "~").localeCompare(b.slot.sat || "~", "pt-BR", { numeric: true }));
     const dayVal = (h, v) => h ? `Feriado (${esc(h.name)})` : esc(v || "—");
@@ -398,6 +439,7 @@
       const lines = [
         ["Sábado " + dm(cur.sat), cur.satH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sat || "—")],
         ["Domingo " + dm(cur.sun), cur.sunH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sun || "—")],
+        ...(sl.after && !cur.satH ? [["Sábado após o expediente", sl.after]] : []),
         ["Sobreaviso na semana", sl.oncall ? "Sim" : "Não"],
         ["Próxima semana", nextRole(x.person)]
       ];
@@ -408,10 +450,11 @@
     const offCard = cur.off.length ? `<div class="slot-card"><div class="slot-top c2">Folga no fim de semana</div><div class="slot-body">
       ${cur.off.map(x => `<div class="slot-name" style="margin-bottom:6px">${esc(pname(x.person))}</div>`).join("")}
       </div></div>` : "";
-    const outside = cfg.people.map((_, i) => i).filter(i => !cur.items.some(x => x.person === i));
+    const outside = cfg.people.map((_, i) => i).filter(i => !cur.items.some(x => x.person === i) && !cur.onVac.includes(i));
     const hol = [cur.satH && `sábado ${dm(cur.sat)} é feriado (${esc(cur.satH.name)})`, cur.sunH && `domingo ${dm(cur.sun)} é feriado (${esc(cur.sunH.name)})`].filter(Boolean);
     const upcoming = [...cfg.regimes].filter(r => r.start > iso(cur.sat)).sort((a, b) => a.start.localeCompare(b.start))[0];
     let notice = "";
+    if (cur.onVac.length) notice += `<div class="notice"><b>Férias:</b> ${cur.onVac.map(i => esc(pname(i))).join(", ")} — nesta semana o plantão reveza só entre ${cur.items.filter(x => x.vac).map(x => esc(pname(x.person))).join(" e ")}.</div>`;
     if (hol.length) notice += `<div class="notice"><b>Atenção:</b> ${hol.join(" e ")} — sem escala de trabalho; ${esc(oncallNames(cur))} fica de plantão o dia todo.</div>`;
     if (upcoming && (parse(upcoming.start) - today) < 120 * 864e5) {
       const sl = upcoming.groups.flatMap(g => g.slots);
@@ -435,6 +478,7 @@
     weeksOfYear(year).forEach(w => { if (!used.includes(w.reg)) used.push(w.reg); });
     return used.map(r => `<div class="legend"><span class="lname">${esc(r.name)} (desde ${parse(r.start).toLocaleDateString("pt-BR")}):</span>
       ${r.groups.flatMap(g => g.slots).filter(sl => sl.sat || sl.sun || sl.oncall).map(sl => `<span class="pill ${slotCls(sl)}">${esc(sl.name)}${sl.sat ? " • sáb " + esc(sl.sat) : ""}${sl.sun ? " • dom " + esc(sl.sun) : ""}${sl.oncall ? " • sobreaviso" : ""}</span>`).join("")}</div>`).join("")
+      + (weeksOfYear(year).some(w => w.onVac.length) ? `<div class="legend"><span class="lname">Durante férias:</span>${cfg.vacationSlots.filter(sl => sl.oncall).map(sl => `<span class="pill cvac">${esc(sl.name)}${sl.sat ? " • sáb " + esc(sl.sat) : ""}${sl.after ? " • " + esc(sl.after) : ""}${sl.sun ? " • dom " + esc(sl.sun) : ""}</span>`).join("")}</div>` : "")
       + `<div class="legend"><span class="pill chol">Feriado: sem escala de trabalho, plantão o dia todo</span></div>`;
   }
   function yearButtons() {
@@ -447,7 +491,7 @@
   function dayBlock(date, h, work, which, w) {
     const rows = h
       ? `<div class="ln hol"><span>Feriado</span><b>${esc(h.name)}</b></div>`
-      : work.length ? work.map(x => `<div class="ln"><span>${esc(x.slot[which])}</span><b>${esc(pname(x.person))}</b></div>`).join("")
+      : work.length ? work.map(x => `<div class="ln"><span>${esc(x.slot[which])}</span><b>${esc(pname(x.person))}</b></div>` + (which === "sat" && x.slot.after ? `<div class="ln acion"><span>${esc(x.slot.after)}</span><b>${esc(pname(x.person))}</b></div>` : "")).join("")
       : `<div class="ln"><span>—</span><b>Sem expediente</b></div>`;
     return `<div class="dhead">${dPrint(date)}</div>${rows}`;
   }
@@ -460,7 +504,7 @@
     $("months").innerHTML = Object.keys(byMonth).map(m => `
       <div class="month"><h3>${monthName(state.year, +m)}</h3>
         ${byMonth[m].map(w => `<div class="wk ${w.key === curKey ? "current" : ""} ${canEdit ? "clickable" : ""}" data-week="${w.key}" title="${canEdit ? "Clique para editar esta semana" : ""}">
-          <div class="wk-title">Escala de finais de semana${w.overridden ? ' <span class="flag">• TROCA</span>' : ""}</div>
+          <div class="wk-title">Escala de finais de semana${w.overridden ? ' <span class="flag">• TROCA</span>' : ""}${w.onVac.length ? ` <span class="flag vacflag">• FÉRIAS: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</div>
           <div class="wk-body">
             <div class="wk-days">${dayBlock(w.sat, w.satH, w.satWork, "sat", w)}${dayBlock(w.sun, w.sunH, w.sunWork, "sun", w)}</div>
             <div class="wk-on"><div class="on-h">SOBREAVISO</div><div class="on-n">${esc(oncallNames(w))}</div></div>
@@ -480,14 +524,14 @@
     const curKey = iso(mondayOf(today));
     do {
       const w = week(mon);
-      html += `<tr class="${w.key === curKey ? "current" : ""}"><td class="plcell">${w.oncall.map(x => `<span class="chip c1">${esc(pname(x.person))}</span>`).join("")}<div class="note" style="font-size:.72rem">${esc(w.reg.name)}${w.overridden ? " • troca" : ""}</div></td>`;
+      html += `<tr class="${w.key === curKey ? "current" : ""}"><td class="plcell">${w.oncall.map(x => `<span class="chip c1">${esc(pname(x.person))}</span>`).join("")}<div class="note" style="font-size:.72rem">${esc(w.reg.name)}${w.overridden ? " • troca" : ""}</div>${w.onVac.length ? `<span class="chip cvac" style="margin-top:4px">Férias: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</td>`;
       for (let i = 0; i < 7; i++) {
         const d = addDays(mon, i);
         const h = holidayOf(d);
         const cls = [d.getMonth() !== state.month ? "other" : "", iso(d) === iso(today) ? "today" : "", i >= 5 ? "weekend" : "", h ? "holiday" : ""].join(" ");
         let chips = "";
         if (h) chips = `<span class="chip chol">Feriado: ${esc(h.name)}</span>${w.oncall.map(x => `<span class="chip c1">Plantão o dia todo • ${esc(pname(x.person))}</span>`).join("")}`;
-        else if (i === 5) chips = w.satWork.map(x => `<span class="chip ${slotCls(x.slot)}">${esc(x.slot.sat)} • ${esc(pname(x.person))}</span>`).join("");
+        else if (i === 5) chips = w.satWork.map(x => `<span class="chip ${slotCls(x.slot)}">${esc(x.slot.sat)} • ${esc(pname(x.person))}</span>` + (x.slot.after ? `<span class="chip cvac">${esc(x.slot.after)} • ${esc(pname(x.person))}</span>` : "")).join("");
         else if (i === 6) chips = w.sunWork.map(x => `<span class="chip ${/sobreaviso/i.test(x.slot.sun) ? "csun" : slotCls(x.slot)}">${esc(x.slot.sun)} • ${esc(pname(x.person))}</span>`).join("");
         if (i === 5 && w.off.length) chips += `<span class="chip c2">Folga • ${w.off.map(x => esc(pname(x.person))).join(", ")}</span>`;
         html += `<td class="${cls}"><div class="dnum">${d.getDate()}</div>${chips}</td>`;
@@ -501,6 +545,32 @@
   // ---------- Configuração (logado) ----------
   const personOptions = sel => cfg.people.map((p, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${esc(p)}</option>`).join("");
   function regimeLabel(id) { for (const r of cfg.regimes) { const g = r.groups.find(x => x.id === id); if (g) return g.name; } return id; }
+
+  // Na volta das férias: quem folgou na última semana vai para a posição anterior ao plantão,
+  // quem volta assume o plantão e o último plantonista folga. O rodízio normal segue daí.
+  function addReturnAnchor(v) {
+    let m = mondayOf(parse(v.end));
+    if (iso(addDays(m, 5)) <= v.end || iso(addDays(m, 6)) <= v.end) m = addDays(m, 7);
+    const last = week(addDays(m, -7));
+    if (!last.onVac.includes(v.person)) return;
+    const back = week(m);
+    if (back.onVac.includes(v.person)) return;
+    last.groupsView.filter(g => g.vac).forEach(lg => {
+      const gid = lg.key.replace(":ferias", "");
+      const g = back.reg.groups.find(x => x.id === gid);
+      if (!g) return;
+      const n = g.slots.length, oi = g.slots.findIndex(x => x.oncall);
+      if (oi < 0) return;
+      const arr = Array(n).fill(null);
+      arr[oi] = v.person;
+      if (lg.order[1] !== undefined && arr[mod(oi - 1, n)] === null) arr[mod(oi - 1, n)] = lg.order[1];
+      if (arr[mod(oi + 1, n)] === null) arr[mod(oi + 1, n)] = lg.order[0];
+      const rest = groupOrder(gid, n, m).filter(p => !arr.includes(p));
+      for (let i = 0; i < n; i++) if (arr[i] === null) arr[i] = rest.shift();
+      cfg.anchors = cfg.anchors.filter(a => !(a.date === iso(m) && a.group === gid)).concat([{ date: iso(m), group: gid, order: arr, auto: true, vacOf: v.person }]);
+      v.autoAnchor = iso(m);
+    });
+  }
 
   function renderConfig() {
     if (!user) { $("configPanel").innerHTML = ""; return; }
@@ -522,11 +592,9 @@
         <h3>Trocar quem está em cada função</h3>
         <p class="lead note">Escolha a semana e defina quem fica em cada posição. “Só esta semana” é uma troca pontual; “Desta semana em diante” reinicia o rodízio a partir daqui. Dica: na previsão anual, clique em uma semana para abri-la aqui.</p>
         <div class="grid4"><div><label>Semana (qualquer dia)</label><input type="date" id="ewDate" value="${ew.key}"></div></div>
-        ${ew.reg.groups.map(g => {
-          const order = groupOrder(g.id, g.slots.length, ew.monday);
-          return `<div class="slot-edit s0" style="margin-top:12px"><label style="color:var(--ink)">${esc(g.name)}</label><div class="grid4">
-            ${g.slots.map((sl, s) => `<div><label>${esc(sl.name)}</label><select data-ewgroup="${g.id}" data-ewslot="${s}" data-prev="${order[s]}">${personOptions(order[s])}</select></div>`).join("")}
-          </div></div>`; }).join("")}
+        ${ew.groupsView.map(g => `<div class="slot-edit ${g.vac ? "s1" : "s0"}" style="margin-top:12px"><label style="color:var(--ink)">${esc(g.name)}</label><div class="grid4">
+            ${g.slots.map((sl, s) => `<div><label>${esc(sl.name)}</label><select data-ewgroup="${g.key}" data-ewslot="${s}" data-prev="${g.order[s]}">${personOptions(g.order[s])}</select></div>`).join("")}
+          </div></div>`).join("")}
         <p class="note" style="margin:8px 0 0">Fim de semana ${dShort(ew.sat)} e ${dShort(ew.sun)} • ${esc(ew.reg.name)}${ew.overridden ? " • <b>já tem troca manual</b>" : ""}</p>
         <div class="actions">
           <button class="primary small" id="ewOnce">Salvar só esta semana</button>
@@ -535,7 +603,26 @@
         ${ovKeys.length ? `<p class="note" style="margin-top:14px"><b>Trocas pontuais:</b></p><ul class="list">${ovKeys.map(k => {
           const w = week(parse(k)); return `<li><span>${dShort(w.sat)}/${w.sat.getFullYear()} — ${w.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall).map(x => `${esc(x.slot.name)}: ${esc(pname(x.person))}`).join(" • ")}</span><button class="danger small" data-delov="${k}">Remover</button></li>`; }).join("")}</ul>` : ""}
         <p class="note" style="margin-top:14px"><b>Pontos de início do rodízio:</b></p>
-        <ul class="list">${anchorsSorted.map((a, i) => `<li><span>A partir de ${parse(a.date).toLocaleDateString("pt-BR")} — ${esc(regimeLabel(a.group))}: ${a.order.map((p, s) => `pos. ${s + 1} = ${esc(pname(p))}`).join(" • ")}</span><button class="danger small" data-delanchor="${a.date}|${a.group}">Remover</button></li>`).join("")}</ul>
+        <ul class="list">${anchorsSorted.map((a, i) => `<li><span>A partir de ${parse(a.date).toLocaleDateString("pt-BR")} — ${esc(regimeLabel(a.group))}${a.auto ? " (volta das férias)" : ""}: ${a.order.map((p, s) => `pos. ${s + 1} = ${esc(pname(p))}`).join(" • ")}</span><button class="danger small" data-delanchor="${a.date}|${a.group}">Remover</button></li>`).join("")}</ul>
+      </div>
+
+      <div class="sect">
+        <h3>Férias</h3>
+        <p class="lead note">Enquanto alguém do rodízio do plantão estiver de férias, os outros dois se revezam: um fica de sobreaviso (sábado ${esc(cfg.vacationSlots[0].sat || "—")} e ${esc(cfg.vacationSlots[0].after || "")}) e o outro folga, trocando a cada semana. Quando a pessoa volta, o rodízio normal continua.</p>
+        <div class="grid4">
+          <div><label>Colaborador</label><select id="vacPerson">${personOptions(2)}</select></div>
+          <div><label>Primeiro dia de férias</label><input type="date" id="vacStart"></div>
+          <div><label>Último dia de férias</label><input type="date" id="vacEnd"></div>
+          <div style="display:flex;align-items:flex-end"><button class="primary small" id="addVac">Adicionar férias</button></div>
+        </div>
+        ${cfg.vacations.length ? `<ul class="list">${[...cfg.vacations].map((v, i) => [v, i]).sort((a, b) => a[0].start.localeCompare(b[0].start)).map(([v, i]) => `<li><span><b>${esc(pname(v.person))}</b> — ${parse(v.start).toLocaleDateString("pt-BR")} a ${parse(v.end).toLocaleDateString("pt-BR")}</span><button class="danger small" data-delvac="${i}">Remover</button></li>`).join("")}</ul>` : `<p class="note">Nenhuma férias cadastrada.</p>`}
+        <p class="note" style="margin-top:14px"><b>Horários durante as férias</b></p>
+        <div class="slot-edit s1"><div class="grid4">
+          <div><label>Nome da função</label><input data-vacf="name" value="${esc(cfg.vacationSlots[0].name)}"></div>
+          <div><label>Sábado</label><input data-vacf="sat" value="${esc(cfg.vacationSlots[0].sat)}"></div>
+          <div><label>Sábado após o expediente</label><input data-vacf="after" value="${esc(cfg.vacationSlots[0].after || "")}"></div>
+          <div><label>Domingo</label><input data-vacf="sun" value="${esc(cfg.vacationSlots[0].sun)}"></div>
+        </div></div>
       </div>
 
       <div class="sect">
@@ -591,6 +678,7 @@
 
   function onConfigInput(e) {
     const t = e.target;
+    if (t.dataset.vacf) { cfg.vacationSlots[0][t.dataset.vacf] = t.value.trim(); return saveConfig(false); }
     if (t.dataset.person !== undefined) { cfg.people[+t.dataset.person] = t.value.trim() || `Colaborador ${+t.dataset.person + 1}`; return saveConfig(false); }
     if (t.dataset.reg !== undefined && t.dataset.f) {
       const r = cfg.regimes[+t.dataset.reg];
@@ -633,12 +721,25 @@
     if (t.id === "ewOnce") { cfg.overrides[ewKey()] = ewOrders(); saveConfig("Troca salva para esta semana"); renderConfig(); }
     else if (t.id === "ewFwd") {
       const k = ewKey(), o = ewOrders();
-      Object.keys(o).forEach(g => { cfg.anchors = cfg.anchors.filter(a => !(a.date === k && a.group === g)).concat([{ date: k, group: g, order: o[g] }]); });
+      Object.keys(o).filter(g => !g.includes(":ferias")).forEach(g => { cfg.anchors = cfg.anchors.filter(a => !(a.date === k && a.group === g)).concat([{ date: k, group: g, order: o[g] }]); });
       Object.keys(cfg.overrides).forEach(x => { if (x >= k) delete cfg.overrides[x]; });
       saveConfig("Rodízio reiniciado a partir desta semana"); renderConfig();
     }
     else if (t.dataset.delov) { delete cfg.overrides[t.dataset.delov]; saveConfig("Troca removida"); renderConfig(); }
     else if (t.dataset.delanchor) { const [d, g] = t.dataset.delanchor.split("|"); cfg.anchors = cfg.anchors.filter(a => !(a.date === d && a.group === g)); saveConfig("Ponto de início removido"); renderConfig(); }
+    else if (t.id === "addVac") {
+      const st = $("vacStart").value, en = $("vacEnd").value;
+      if (!st || !en) return toast("Preencha o primeiro e o último dia");
+      if (en < st) return toast("O último dia precisa ser depois do primeiro");
+      const v = { person: +$("vacPerson").value, start: st, end: en };
+      cfg.vacations.push(v);
+      addReturnAnchor(v);
+      saveConfig("Férias adicionadas"); renderConfig();
+    }
+    else if (t.dataset.delvac) {
+      const v = cfg.vacations[+t.dataset.delvac];
+      if (v.autoAnchor) cfg.anchors = cfg.anchors.filter(a => !(a.auto && a.date === v.autoAnchor && a.vacOf === v.person));
+      cfg.vacations.splice(+t.dataset.delvac, 1); saveConfig("Férias removidas"); renderConfig(); }
     else if (t.id === "addHol") {
       const d = $("holDate").value; if (!d) return toast("Escolha a data do feriado");
       cfg.holidays = cfg.holidays.filter(h => h.date !== d).concat([{ date: d, name: $("holName").value.trim() || "Feriado" }]);
@@ -767,12 +868,12 @@
   });
   $("printBtn").addEventListener("click", () => window.print());
   $("csvBtn").addEventListener("click", () => {
-    const rows = [["Sábado", "Domingo", "Escala", "Colaborador", "Função", "Sábado (horário)", "Domingo (horário)", "Sobreaviso", "Feriado", "Troca manual"]];
+    const rows = [["Sábado", "Domingo", "Escala", "Colaborador", "Função", "Sábado (horário)", "Domingo (horário)", "Sobreaviso", "Feriado", "Férias", "Troca manual"]];
     weeksOfYear(state.year).forEach(w => w.items.forEach(x => rows.push([
       w.sat.toLocaleDateString("pt-BR"), w.sun.toLocaleDateString("pt-BR"), w.reg.name, pname(x.person), x.slot.name,
-      w.satH ? (x.slot.oncall ? "Feriado - plantão o dia todo" : "Feriado") : (x.slot.sat || "-"),
+      w.satH ? (x.slot.oncall ? "Feriado - plantão o dia todo" : "Feriado") : ((x.slot.sat || "-") + (x.slot.after ? " / " + x.slot.after : "")),
       w.sunH ? (x.slot.oncall ? "Feriado - plantão o dia todo" : "Feriado") : (x.slot.sun || "-"),
-      x.slot.oncall ? "Sim" : "Não", [w.satH, w.sunH].filter(Boolean).map(h => h.name).join(" / ") || "-", w.overridden ? "Sim" : "Não"])));
+      x.slot.oncall ? "Sim" : "Não", [w.satH, w.sunH].filter(Boolean).map(h => h.name).join(" / ") || "-", w.onVac.map(pname).join(", ") || "-", w.overridden ? "Sim" : "Não"])));
     const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
     download(`escala-plantoes-noc-${state.year}.csv`, csv, "text/csv;charset=utf-8;");
   });
