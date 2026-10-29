@@ -97,6 +97,42 @@
   .ln.acion { background: #fff5f8; } .ln.acion span { white-space: normal; color: #9a1f5c; }
   .flag.vacflag { color: #9a1f5c; }
   .cal td.holiday { background: #fffaf0; }
+  .cti { background: #e6f0ff; color: #1f4f99; }
+  .on-ti { border-top: 1px dashed #b9c7d8; padding: 6px; text-align: center; font-size: .72rem; color: #1f4f99; }
+  .on-ti b { font-size: .85rem; }
+  .hr-scroll { overflow-x: auto; margin-top: 12px; }
+  table.hr, table.hrsum, table.tpl { border-collapse: collapse; font-size: .74rem; }
+  table.hr th, table.hr td { border: 1px solid #b9c7d8; padding: 3px 4px; text-align: center; min-width: 46px; white-space: nowrap; }
+  table.hr thead tr:first-child th { background: #6d9eeb; color: #0d2340; font-weight: 800; }
+  table.hr th.wd { background: #fff; font-weight: 800; }
+  table.hr th.th-hol { background: #4a7fd1; color: #fff; }
+  table.hr .nm, table.hrsum .nm, table.tpl .nm { text-align: left; font-weight: 800; position: sticky; left: 0; background: #fff; z-index: 1; min-width: 240px; }
+  table.hr thead .nm { background: #6d9eeb; }
+  td.hc { cursor: pointer; font-weight: 700; }
+  td.hc:hover { outline: 2px solid var(--navy2); outline-offset: -2px; }
+  td.manual { box-shadow: inset 0 0 0 2px #7a4dd8; }
+  .h-dom { background: #e06666 !important; color: #3d0b0b; }
+  .h-frd { background: #6fa8dc !important; color: #0b2a47; }
+  .h-f { background: #d9ead3 !important; color: #274e13; }
+  .h-ho { background: #33d65c !important; color: #0b3a17; }
+  .h-fer { background: #f6b26b !important; color: #5a2d00; }
+  .h-num { background: #f1f3f6; }
+  .pill.h-dom, .pill.h-frd, .pill.h-f, .pill.h-ho, .pill.h-fer { padding: 5px 10px; }
+  .cellsel { width: 120px; padding: 2px; font-size: .72rem; }
+  table.hrsum th, table.hrsum td { border: 1px solid #dce3ec; padding: 5px 8px; text-align: center; white-space: nowrap; }
+  table.hrsum th { background: #f8fafc; }
+  table.tpl th, table.tpl td { border: 1px solid #dce3ec; padding: 4px; text-align: center; }
+  table.tpl th { background: #f8fafc; }
+  table.tpl select { width: 84px; padding: 4px; font-size: .78rem; }
+  table.tpl td.kind { font-size: .74rem; color: var(--muted); white-space: nowrap; }
+  table.codes input { padding: 5px 6px; font-size: .8rem; }
+  table.codes td:nth-child(2) input { min-width: 260px; }
+  .hrcfg summary { cursor: pointer; padding: 6px 0; }
+  .hrcfg h4 { margin: 18px 0 4px; font-size: .95rem; }
+  .emp-row { display: grid; grid-template-columns: 1.4fr 1fr 2fr auto; gap: 10px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; background: #fbfcfe; }
+  .emp-row .links { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 0; }
+  .emp-btns { display: flex; gap: 6px; }
+  @media (max-width: 860px) { .emp-row { grid-template-columns: 1fr; } }
   .group-edit { border: 1px dashed #c9d4e1; border-radius: 10px; padding: 10px; margin-top: 12px; background: #fff; }
   .flag { font-size: .68rem; color: #a26b00; font-weight: 800; }
 
@@ -149,7 +185,7 @@
   @media print {
     body { background: #fff; }
     .wrap { max-width: none; padding: 0; }
-    .tabs, .userbox, .yearbtns, .cal-nav, #tab-config, .no-print { display: none !important; }
+    .tabs, .userbox, .yearbtns, .cal-nav, #tab-config, .no-print, .hrcfg { display: none !important; }
     .panel, .month { break-inside: avoid; box-shadow: none; }
     * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   }
@@ -169,6 +205,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="painel">Painel</button>
     <button class="tab" data-tab="calendario">Calendário</button>
+    <button class="tab hidden" data-tab="rh" id="tabRhBtn">Escala RH</button>
     <button class="tab hidden" data-tab="config" id="tabConfigBtn">Configurar escala</button>
   </nav>
 
@@ -213,6 +250,24 @@
   </section>
 
   <!-- CONFIG -->
+  <section id="tab-rh" class="hidden">
+    <div class="panel">
+      <div class="row-between">
+        <div>
+          <h2>Escala RH — setor todo</h2>
+          <p class="lead" style="margin:0">Preenchida automaticamente a partir da escala de plantões, feriados e férias. Copie e cole no controle do RH.</p>
+        </div>
+        <div class="cal-nav">
+          <div class="yearbtns" data-years></div>
+          <button class="secondary small" id="hrPrev">◀</button>
+          <select id="hrMonth"></select>
+          <button class="secondary small" id="hrNext">▶</button>
+        </div>
+      </div>
+      <div id="hrPanel"></div>
+    </div>
+  </section>
+
   <section id="tab-config" class="hidden">
     <div class="panel" id="configPanel"></div>
   </section>
@@ -262,6 +317,7 @@
   let userEmail = "";
   let fb = null;          // { auth, db, ref, setDoc, signIn, signOut, serverTimestamp }
   let lastSynced = "";    // última versão vinda/enviada ao Firestore
+  let lastSyncedRh = "", rhLoaded = false, rhUnsub = null;
   // ============================================
 
   const USERS = {
@@ -334,18 +390,34 @@
       c.regimes.forEach(r => { if (r.name === "Escala reduzida") r.name = "Nova escala — conforme legislação vigente"; });
       c.fix2 = true;
     }
+    if (!saved.fix3) {
+      // Dezembro: plantão da T.I alternando semanalmente entre Wanessa e Marcos
+      if (!c.people.some(p => p.trim().toLowerCase() === "marcos")) c.people.push("Marcos");
+      const dec = c.regimes.find(r => r.start === "2026-12-01");
+      if (dec && !dec.groups.some(g => g.id === "ti")) {
+        dec.groups.push({ id: "ti", name: "Plantão da T.I", slots: [
+          { name: "Plantão T.I", sat: "", sun: "", oncall: false, ti: true },
+          { name: "Folga", sat: "", sun: "", oncall: false }
+        ]});
+        const wi = c.people.findIndex(p => p.toLowerCase().includes("wanessa"));
+        const mi = c.people.findIndex(p => p.trim().toLowerCase() === "marcos");
+        if (!c.anchors.some(a => a.group === "ti")) c.anchors.push({ date: "2026-11-30", group: "ti", order: [wi >= 0 ? wi : 0, mi] });
+      }
+      c.fix3 = true;
+    }
+    if (!c.hr) c.hr = defaultHR(c.people);
     return c;
   }
   function loadConfig() {
     try { const raw = localStorage.getItem(STORE_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) {}
-    return clone(DEFAULT_CONFIG);
+    return migrate({});
   }
   let cfg = loadConfig();
   let pushTimer = null;
-  function saveConfig(msg) {
+  function saveConfig(msg, quiet) {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(cfg)); } catch (e) {}
     if (FB_ON) { clearTimeout(pushTimer); setSync("saving"); pushTimer = setTimeout(pushRemote, 700); }
-    renderViews();
+    yearButtons(); renderNow(); renderYear(); renderCalendar(); if (!quiet) renderHR();
     if (msg !== false) toast(msg || "Alterações salvas");
   }
 
@@ -362,17 +434,20 @@
   }
   async function pushRemote() {
     if (!fb || !user) return;
-    const data = JSON.stringify(cfg);
+    const { hr, ...rest } = cfg;
+    const data = JSON.stringify(rest), rhData = JSON.stringify(hr);
     try {
-      lastSynced = data;
-      await fb.setDoc(fb.ref, { data, updatedBy: user, updatedAt: fb.serverTimestamp() });
+      const jobs = [];
+      if (data !== lastSynced) { lastSynced = data; jobs.push(fb.setDoc(fb.ref, { data, updatedBy: user, updatedAt: fb.serverTimestamp() })); }
+      if (rhLoaded && rhData !== lastSyncedRh) { lastSyncedRh = rhData; jobs.push(fb.setDoc(fb.rhRef, { data: rhData, updatedBy: user, updatedAt: fb.serverTimestamp() })); }
+      await Promise.all(jobs);
       setSync("ok");
     } catch (e) {
       const c = e.code || "";
       const msg = /permission-denied/.test(c) ? "sem permissão — confira as regras do Firestore e o e-mail do usuário"
         : /not-found|failed-precondition/.test(c) ? "banco Firestore não encontrado — crie o banco de dados"
         : /unavailable/.test(c) ? "sem conexão com o Firebase" : (c || e.message);
-      lastSynced = ""; setSync("error", msg); toast("Não foi possível salvar: " + msg);
+      lastSynced = ""; lastSyncedRh = ""; setSync("error", msg); toast("Não foi possível salvar: " + msg);
     }
   }
   async function initFirebase() {
@@ -382,11 +457,21 @@
       const [appM, authM, fsM] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-auth.js"), import(base + "firebase-firestore.js")]);
       const app = appM.initializeApp(FIREBASE_CONFIG);
       const auth = authM.getAuth(app), db = fsM.getFirestore(app);
-      fb = { auth, db, ref: fsM.doc(db, "escala", "config"), setDoc: fsM.setDoc, serverTimestamp: fsM.serverTimestamp,
+      fb = { auth, db, ref: fsM.doc(db, "escala", "config"), rhRef: fsM.doc(db, "escala", "rh"), setDoc: fsM.setDoc, serverTimestamp: fsM.serverTimestamp,
         signIn: (e, p) => authM.signInWithEmailAndPassword(auth, e, p), signOut: () => authM.signOut(auth) };
       authM.onAuthStateChanged(auth, u => {
         userEmail = u ? u.email : "";
         user = u ? (Object.keys(USER_EMAILS).find(k => USER_EMAILS[k] === u.email) || u.email.split("@")[0]) : null;
+        if (rhUnsub) { rhUnsub(); rhUnsub = null; rhLoaded = false; }
+        if (u) rhUnsub = fsM.onSnapshot(fb.rhRef, snap => {
+          rhLoaded = true;
+          if (!snap.exists()) return;
+          const { data } = snap.data();
+          if (!data || data === lastSyncedRh) return;
+          lastSyncedRh = data;
+          try { cfg.hr = JSON.parse(data); } catch (e) { return; }
+          if (!(document.activeElement && $("hrPanel").contains(document.activeElement) && document.activeElement.tagName === "INPUT")) renderHR();
+        }, e => setSync("error", e.code || e.message));
         renderUser(); renderViews(); renderConfig();
       });
       fsM.onSnapshot(fb.ref, snap => {
@@ -394,7 +479,7 @@
         const { data, updatedBy } = snap.data();
         if (!data || data === lastSynced) { setSync("ok"); return; }
         lastSynced = data;
-        try { cfg = migrate(JSON.parse(data)); } catch (e) { return; }
+        try { const keep = cfg.hr; cfg = migrate(JSON.parse(data)); if (keep) cfg.hr = keep; } catch (e) { return; }
         try { localStorage.setItem(STORE_KEY, data); } catch (e) {}
         renderViews();
         const editing = document.activeElement && $("configPanel").contains(document.activeElement);
@@ -424,7 +509,7 @@
   // ---------- Regras ----------
   const holidayOf = d => cfg.holidays.find(h => h.date === iso(d));
   const pname = i => cfg.people[i] ?? "—";
-  const slotCls = sl => sl.oncall ? "c1" : (sl.sat || sl.sun) ? "c0" : "c2";
+  const slotCls = sl => sl.ti ? "cti" : sl.oncall ? "c1" : (sl.sat || sl.sun) ? "c0" : "c2";
   function regimeFor(date) {
     const key = iso(date);
     const sorted = [...cfg.regimes].sort((a, b) => a.start.localeCompare(b.start));
@@ -492,7 +577,7 @@
     const satH = holidayOf(sat), sunH = holidayOf(sun);
     const satWork = satH ? [] : items.filter(x => x.slot.sat).sort((a, b) => a.slot.sat.localeCompare(b.slot.sat, "pt-BR", { numeric: true }));
     const sunWork = sunH ? [] : items.filter(x => x.slot.sun);
-    const off = items.filter(x => !x.slot.sat && !x.slot.sun && !x.slot.oncall);
+    const off = items.filter(x => !x.slot.sat && !x.slot.sun && !x.slot.oncall && !x.slot.ti);
     const onVac = away.filter(p => !items.some(x => x.person === p));
     return { monday, sat, sun, reg, key, items, groupsView, oncall, satH, sunH, satWork, sunWork, off, onVac, overridden: !!cfg.overrides[key] };
   }
@@ -510,12 +595,12 @@
     const cur = week(mondayOf(today));
     const nxt = week(addDays(cur.monday, 7));
     const nextRole = p => { const it = nxt.items.find(x => x.person === p); return it ? it.slot.name : nxt.onVac.includes(p) ? "Férias" : "Fora da escala"; };
-    const working = cur.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall)
+    const working = cur.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall || x.slot.ti)
       .sort((a, b) => (a.slot.oncall - b.slot.oncall) || (a.slot.sat || "~").localeCompare(b.slot.sat || "~", "pt-BR", { numeric: true }));
     const dayVal = (h, v) => h ? `Feriado (${esc(h.name)})` : esc(v || "—");
     const cards = working.map(x => {
       const sl = x.slot;
-      const lines = [
+      const lines = sl.ti ? [["Fim de semana", "Plantão da T.I (sem carga horária)"], ["Próxima semana", nextRole(x.person)]] : [
         ["Sábado " + dm(cur.sat), cur.satH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sat || "—")],
         ["Domingo " + dm(cur.sun), cur.sunH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sun || "—")],
         ...(sl.after && !cur.satH ? [["Sábado após o expediente", sl.after]] : []),
@@ -547,7 +632,7 @@
       <div class="now-grid">${cards}${offCard}</div>
       ${outside.length ? `<p class="note" style="margin:10px 0 0">Fora da escala nesta semana: ${outside.map(i => esc(pname(i))).join(", ")}</p>` : ""}
       <div class="next"><b>Próxima semana (${dShort(nxt.sat)} e ${dShort(nxt.sun)}):</b>
-        ${nxt.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall).map(x => `<span class="pill ${slotCls(x.slot)}">${esc(x.slot.name)}: ${esc(pname(x.person))}</span>`).join("")}
+        ${nxt.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall || x.slot.ti).map(x => `<span class="pill ${slotCls(x.slot)}">${esc(x.slot.name)}: ${esc(pname(x.person))}</span>`).join("")}
       </div>${notice}`;
   }
 
@@ -556,7 +641,7 @@
     const used = [];
     weeksOfYear(year).forEach(w => { if (!used.includes(w.reg)) used.push(w.reg); });
     return used.map(r => `<div class="legend"><span class="lname">${esc(r.name)} (desde ${parse(r.start).toLocaleDateString("pt-BR")}):</span>
-      ${r.groups.flatMap(g => g.slots).filter(sl => sl.sat || sl.sun || sl.oncall).map(sl => `<span class="pill ${slotCls(sl)}">${esc(sl.name)}${sl.sat ? " • sáb " + esc(sl.sat) : ""}${sl.sun ? " • dom " + esc(sl.sun) : ""}${sl.oncall ? " • sobreaviso" : ""}</span>`).join("")}</div>`).join("")
+      ${r.groups.flatMap(g => g.slots).filter(sl => sl.sat || sl.sun || sl.oncall || sl.ti).map(sl => `<span class="pill ${slotCls(sl)}">${esc(sl.name)}${sl.sat ? " • sáb " + esc(sl.sat) : ""}${sl.sun ? " • dom " + esc(sl.sun) : ""}${sl.oncall ? " • sobreaviso" : ""}</span>`).join("")}</div>`).join("")
       + (weeksOfYear(year).some(w => w.onVac.length) ? `<div class="legend"><span class="lname">Durante férias:</span>${cfg.vacationSlots.filter(sl => sl.oncall).map(sl => `<span class="pill cvac">${esc(sl.name)}${sl.sat ? " • sáb " + esc(sl.sat) : ""}${sl.after ? " • " + esc(sl.after) : ""}${sl.sun ? " • dom " + esc(sl.sun) : ""}</span>`).join("")}</div>` : "")
       + `<div class="legend"><span class="pill chol">Feriado: sem escala de trabalho, plantão o dia todo</span></div>`;
   }
@@ -586,7 +671,7 @@
           <div class="wk-title">Escala de finais de semana${w.overridden ? ' <span class="flag">• TROCA</span>' : ""}${w.onVac.length ? ` <span class="flag vacflag">• FÉRIAS: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</div>
           <div class="wk-body">
             <div class="wk-days">${dayBlock(w.sat, w.satH, w.satWork, "sat", w)}${dayBlock(w.sun, w.sunH, w.sunWork, "sun", w)}</div>
-            <div class="wk-on"><div class="on-h">SOBREAVISO</div><div class="on-n">${esc(oncallNames(w))}</div></div>
+            <div class="wk-on"><div class="on-h">SOBREAVISO</div><div class="on-n">${esc(oncallNames(w))}</div>${w.items.filter(x => x.slot.ti).map(x => `<div class="on-ti">Plantão T.I<br><b>${esc(pname(x.person))}</b></div>`).join("")}</div>
           </div>
         </div>`).join("")}
       </div>`).join("");
@@ -603,7 +688,7 @@
     const curKey = iso(mondayOf(today));
     do {
       const w = week(mon);
-      html += `<tr class="${w.key === curKey ? "current" : ""}"><td class="plcell">${w.oncall.map(x => `<span class="chip c1">${esc(pname(x.person))}</span>`).join("")}<div class="note" style="font-size:.72rem">${esc(w.reg.name)}${w.overridden ? " • troca" : ""}</div>${w.onVac.length ? `<span class="chip cvac" style="margin-top:4px">Férias: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</td>`;
+      html += `<tr class="${w.key === curKey ? "current" : ""}"><td class="plcell">${w.oncall.map(x => `<span class="chip c1">${esc(pname(x.person))}</span>`).join("")}${w.items.filter(x => x.slot.ti).map(x => `<span class="chip cti">T.I: ${esc(pname(x.person))}</span>`).join("")}<div class="note" style="font-size:.72rem">${esc(w.reg.name)}${w.overridden ? " • troca" : ""}</div>${w.onVac.length ? `<span class="chip cvac" style="margin-top:4px">Férias: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</td>`;
       for (let i = 0; i < 7; i++) {
         const d = addDays(mon, i);
         const h = holidayOf(d);
@@ -846,7 +931,311 @@
     }
     else if (t.id === "exportCfg") download("escala-noc-config.json", JSON.stringify(cfg, null, 2), "application/json");
     else if (t.id === "importCfg") $("importFile").click();
-    else if (t.id === "resetCfg") { if (confirm("Restaurar a configuração padrão? As alterações serão perdidas.")) { cfg = clone(DEFAULT_CONFIG); saveConfig("Configuração restaurada"); renderConfig(); } }
+    else if (t.id === "resetCfg") { if (confirm("Restaurar a configuração padrão? As alterações serão perdidas.")) { const keepHR = cfg.hr; cfg = migrate({}); cfg.hr = keepHR; saveConfig("Configuração restaurada"); renderConfig(); } }
+  }
+
+  // ================= ESCALA RH (setor todo) =================
+  const WD = ["SEG", "TER", "QUA", "QUI", "SEX"];
+  const DAYABBR = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
+  const SPECIAL = ["F", "DOM", "FRD", "FÉRIAS"];
+  function defaultHR(people) {
+    const find = (...names) => { for (const n of names) { const i = people.findIndex(p => p.toLowerCase().includes(n)); if (i >= 0) return i; } return -1; };
+    const exact = n => people.findIndex(p => p.trim().toLowerCase() === n);
+    const L = (...idx) => idx.filter(i => i >= 0);
+    const five = c => [c, c, c, c, c];
+    return {
+      codes: [
+        { id: "1", desc: "SEG-SEX 8:00-18:00 (2hs de intervalo)", start: "08:00", end: "18:00", brk: 2, ho: false },
+        { id: "2", desc: "SÁBADO 08:00-12:00 HOME OFFICE", start: "08:00", end: "12:00", brk: 0, ho: true },
+        { id: "3", desc: "SAB 12:00-16:00 HOME OFFICE", start: "12:00", end: "16:00", brk: 0, ho: true },
+        { id: "4", desc: "SEG-SEX 15:00-00:00 (1hs de interv.)", start: "15:00", end: "00:00", brk: 1, ho: false },
+        { id: "5", desc: "DOM 9:00-13:00 HOME OFFICE", start: "09:00", end: "13:00", brk: 0, ho: true },
+        { id: "6", desc: "SEG-QUI 8:00-18:00 (1h de interv.)", start: "08:00", end: "18:00", brk: 1, ho: false },
+        { id: "7", desc: "SEX 8:00-17:00 (1h de interv.)", start: "08:00", end: "17:00", brk: 1, ho: false },
+        { id: "8", desc: "SEG-QUI 14:00-00:00 (1h de interv.)", start: "14:00", end: "00:00", brk: 1, ho: false },
+        { id: "9", desc: "SEG-SEX 9:00-19:00 (2hs de interv.)", start: "09:00", end: "19:00", brk: 2, ho: false },
+        { id: "10", desc: "SEG-QUI 9:00-19:00 (1hs de interv.)", start: "09:00", end: "19:00", brk: 1, ho: false },
+        { id: "11", desc: "SEX 10:00-19:00 (1hs de interv.)", start: "10:00", end: "19:00", brk: 1, ho: false },
+        { id: "12", desc: "SEG-SEX 8:00-14:00", start: "08:00", end: "14:00", brk: 0, ho: false },
+        { id: "13", desc: "08:00-13:00 HOME OFFICE", start: "08:00", end: "13:00", brk: 0, ho: true },
+        { id: "14", desc: "13:00-18:00 HOME OFFICE", start: "13:00", end: "18:00", brk: 0, ho: true },
+        { id: "15", desc: "SEG-SEX 8:00-17:00 (1h de interv.)", start: "08:00", end: "17:00", brk: 1, ho: false },
+        { id: "16", desc: "SEG-SEX 9:00-18:00 (1h de interv.)", start: "09:00", end: "18:00", brk: 1, ho: false },
+        { id: "17", desc: "SEG-SEX 17:00-00:00 (1h de interv.)", start: "17:00", end: "00:00", brk: 1, ho: false }
+      ],
+      employees: [
+        { id: "jorge", name: "JORGE RODRIGUES PEREIRA", role: "Analista de monitoramento", links: L(find("jorge")) },
+        { id: "wanessa", name: "WANESSA HAVENNA SOUZA RAMOS", role: "Supervisora", links: L(find("wanessa")) },
+        { id: "caio", name: "CAIO RAFAEL BARBOSA RIBEIRO", role: "Estagiário (6h/dia)", links: [] },
+        { id: "marcos", name: "MARCOS SABINO DE OLIVEIRA NETO", role: "Assistente de T.I", links: L(find("jorge/marcos", "marcos"), exact("marcos")).filter((v, i, a) => a.indexOf(v) === i) },
+        { id: "joaquim", name: "JOAQUIM HEITOR TOMÉ PINTO FILHO", role: "Analista de NOC", links: L(find("heitor")) },
+        { id: "felipe", name: "FELIPE GOMES DE BARROS", role: "Analista de NOC", links: L(find("felipe")) },
+        { id: "gabriel", name: "GABRIEL ALMEIDA DA COSTA", role: "Analista de NOC", links: L(find("gabriel")) }
+      ],
+      // work = semana em que trabalha no fim de semana; off = semana de folga no fim de semana (SEG a SEX)
+      periods: [
+        { name: "Horários atuais", start: "2026-01-01", t: {
+          jorge: { work: five("1"), off: ["6", "6", "6", "6", "7"] },
+          wanessa: { work: five("1"), off: ["6", "6", "6", "6", "7"] },
+          caio: { work: five("12"), off: five("12") },
+          marcos: { work: five("1"), off: ["6", "6", "6", "6", "7"] },
+          joaquim: { work: five("1"), off: ["6", "6", "6", "6", "7"] },
+          felipe: { work: five("4"), off: ["8", "8", "8", "8", "4"] },
+          gabriel: { work: five("9"), off: ["10", "10", "10", "10", "9"] }
+        }},
+        { name: "Nova escala — dezembro", start: "2026-12-01", t: {
+          jorge: { work: five("1"), off: five("1") },
+          wanessa: { work: five("1"), off: five("1") },
+          caio: { work: five("12"), off: five("12") },
+          marcos: { work: five("1"), off: five("1") },
+          joaquim: { work: ["1", "15", "15", "15", "15"], off: five("1") },
+          felipe: { work: ["4", "17", "17", "17", "17"], off: five("4") },
+          gabriel: { work: ["9", "16", "16", "16", "16"], off: five("9") }
+        }}
+      ],
+      overrides: {}   // { empId: { "AAAA-MM-DD": "código" } }
+    };
+  }
+  const hrState = { editCell: null };
+  const codeById = id => cfg.hr.codes.find(c => c.id === String(id));
+  const tmin = t => { const [h, m] = String(t || "0:0").split(":").map(Number); return h * 60 + (m || 0); };
+  function codeHours(c) {
+    if (!c) return 0;
+    let a = tmin(c.start), b = tmin(c.end); if (b <= a) b += 24 * 60;
+    return Math.max(0, (b - a) / 60 - (+c.brk || 0));
+  }
+  const label = v => { const c = codeById(v); return c && c.ho ? `HO - ${c.id}` : String(v); };
+  const valHours = v => SPECIAL.includes(v) ? 0 : codeHours(codeById(v));
+  function hrPeriodFor(date) {
+    const key = iso(date);
+    const sorted = [...cfg.hr.periods].sort((a, b) => a.start.localeCompare(b.start));
+    let p = sorted[0]; sorted.forEach(x => { if (x.start <= key) p = x; });
+    return p;
+  }
+  // Código de home office a partir do horário do turno (ex.: "8h às 12h" -> código 2)
+  function codeForTime(txt, dayName) {
+    const m = String(txt || "").match(/(\d{1,2})(?:[:h](\d{2}))?\s*h?\s*(?:às|as|a|-|–)\s*(\d{1,2})(?:[:h](\d{2}))?/i);
+    if (!m) return null;
+    const s = pad(+m[1]) + ":" + (m[2] || "00"), e = pad(+m[3]) + ":" + (m[4] || "00");
+    const list = cfg.hr.codes.filter(c => c.ho && c.start === s && c.end === e);
+    return (list.find(c => new RegExp(dayName, "i").test(c.desc)) || list[0] || { id: null }).id;
+  }
+  const vacationOn = (emp, d) => cfg.vacations.some(v => emp.links.includes(v.person) && v.start <= iso(d) && v.end >= iso(d));
+  function weekendInfo(emp, w) {
+    const mine = w.items.filter(x => emp.links.includes(x.person));
+    const sat = mine.map(x => x.slot.sat && codeForTime(x.slot.sat, "s[aá]b") && { code: codeForTime(x.slot.sat, "s[aá]b"), oncall: x.slot.oncall }).find(Boolean);
+    const sun = mine.map(x => x.slot.sun && codeForTime(x.slot.sun, "dom") && { code: codeForTime(x.slot.sun, "dom"), oncall: x.slot.oncall }).find(Boolean);
+    return { sat, sun, works: !!(sat || sun), ti: mine.some(x => x.slot.ti) };
+  }
+  function hrAuto(emp, d) {
+    const dow = d.getDay();
+    if (vacationOn(emp, d)) return "FÉRIAS";
+    const w = week(mondayOf(d));
+    const info = weekendInfo(emp, w);
+    const hol = holidayOf(d);
+    if (dow === 6 || dow === 0) {
+      const s = dow === 6 ? info.sat : info.sun;
+      if (hol) return s && s.oncall ? s.code : "FRD";
+      return s ? s.code : (dow === 6 ? "F" : "DOM");
+    }
+    if (hol) return "FRD";
+    const t = hrPeriodFor(d).t[emp.id];
+    if (!t) return "";
+    return (info.works ? t.work : t.off)[dow - 1] || "";
+  }
+  function hrValue(emp, d) {
+    const o = cfg.hr.overrides[emp.id] && cfg.hr.overrides[emp.id][iso(d)];
+    return { v: o !== undefined ? o : hrAuto(emp, d), manual: o !== undefined };
+  }
+  const cellCls = v => v === "DOM" ? "h-dom" : v === "FRD" ? "h-frd" : v === "F" ? "h-f" : v === "FÉRIAS" ? "h-fer" : (codeById(v) && codeById(v).ho) ? "h-ho" : v ? "h-num" : "";
+  function monthDays() { const n = new Date(state.year, state.month + 1, 0).getDate(); return Array.from({ length: n }, (_, i) => new Date(state.year, state.month, i + 1, 12)); }
+  const hdrDate = d => `${pad(d.getDate())}-${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}.`;
+  function valueOptions(sel) {
+    return `<option value="__auto">Automático</option>` + SPECIAL.map(s => `<option ${s === sel ? "selected" : ""}>${s}</option>`).join("")
+      + cfg.hr.codes.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(label(c.id))} — ${esc(c.desc)}</option>`).join("");
+  }
+
+  function renderHR() {
+    const box = $("hrPanel"); if (!box) return;
+    if (!user) { box.innerHTML = ""; return; }
+    $("hrMonth").innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(state.year, m)}</option>`).join("");
+    const days = monthDays();
+    const emps = cfg.hr.employees;
+    let html = `<table class="hr"><thead><tr><th class="nm">Nome</th>${days.map(d => `<th class="${holidayOf(d) ? "th-hol" : ""}">${hdrDate(d)}</th>`).join("")}</tr>
+      <tr><th class="nm"></th>${days.map(d => `<th class="wd">${DAYABBR[d.getDay()]}</th>`).join("")}</tr></thead><tbody>`;
+    emps.forEach(e => {
+      html += `<tr><td class="nm" title="${esc(e.role)}">${esc(e.name)}</td>`;
+      days.forEach(d => {
+        const { v, manual } = hrValue(e, d);
+        const editing = hrState.editCell === e.id + "|" + iso(d);
+        html += editing
+          ? `<td class="${cellCls(v)}"><select class="cellsel" data-hremp="${e.id}" data-hrdate="${iso(d)}">${valueOptions(manual ? v : "__none")}</select></td>`
+          : `<td class="hc ${cellCls(v)} ${manual ? "manual" : ""}" data-hremp="${e.id}" data-hrdate="${iso(d)}" title="${manual ? "Ajuste manual — clique para alterar" : "Clique para ajustar"}">${esc(label(v))}</td>`;
+      });
+      html += "</tr>";
+    });
+    html += "</tbody></table>";
+    // Carga horária por semana
+    const weeks = []; let m = mondayOf(days[0]);
+    while (m <= days[days.length - 1]) { weeks.push(m); m = addDays(m, 7); }
+    let ht = `<table class="hrsum"><thead><tr><th class="nm">Horas por semana (seg–dom)</th>${weeks.map(w => `<th>${dm(w)} a ${dm(addDays(w, 6))}</th>`).join("")}</tr></thead><tbody>`;
+    emps.forEach(e => {
+      ht += `<tr><td class="nm">${esc(e.name)}</td>${weeks.map(w => {
+        let h = 0; for (let i = 0; i < 7; i++) h += valHours(hrValue(e, addDays(w, i)).v);
+        return `<td>${h ? (Math.round(h * 10) / 10) + "h" : "—"}</td>`;
+      }).join("")}</tr>`;
+    });
+    ht += "</tbody></table>";
+    const ti = weeks.map(w => week(w)).filter(w => w.items.some(x => x.slot.ti));
+    box.innerHTML = `
+      <div class="hr-scroll">${html}</div>
+      <div class="legend" style="margin-top:12px">
+        <span class="pill h-dom">DOM • domingo</span><span class="pill h-f">F • folga</span><span class="pill h-frd">FRD • feriado</span>
+        <span class="pill h-fer">FÉRIAS</span><span class="pill h-ho">HO • home office</span>
+        <span class="note">Clique numa célula para ajustar manualmente (borda tracejada = ajuste manual).</span>
+      </div>
+      <div class="actions no-print">
+        <button class="primary small" id="hrCopyCodes">Copiar só os códigos</button>
+        <button class="secondary small" id="hrCopyAll">Copiar tabela com nomes e datas</button>
+        <button class="secondary small" id="hrCsv">Baixar CSV</button>
+        <button class="danger small" id="hrClearMonth">Limpar ajustes manuais do mês</button>
+      </div>
+      <p class="note">“Copiar só os códigos” copia as linhas dos colaboradores na mesma ordem da planilha: clique na primeira célula do dia 1 no controle do RH e cole (Ctrl+V).</p>
+      ${ti.length ? `<p class="note"><b>Plantão da T.I (sem carga horária):</b> ${ti.map(w => `${dShort(w.sat)}: ${w.items.filter(x => x.slot.ti).map(x => esc(pname(x.person))).join(", ")}`).join(" • ")}</p>` : ""}
+      <div class="hr-scroll" style="margin-top:14px">${ht}</div>
+      ${renderHRConfig()}`;
+  }
+
+  function renderHRConfig() {
+    const emps = cfg.hr.employees;
+    const opt = sel => cfg.hr.codes.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(label(c.id))}</option>`).join("")
+      + SPECIAL.map(s => `<option ${s === sel ? "selected" : ""}>${s}</option>`).join("");
+    const periods = [...cfg.hr.periods].map((p, i) => [p, i]).sort((a, b) => a[0].start.localeCompare(b[0].start));
+    return `
+    <details class="sect hrcfg" ${hrState.cfgOpen ? "open" : ""} id="hrCfgDetails">
+      <summary><h3 style="display:inline">Configurar escala RH</h3></summary>
+
+      <h4>Colaboradores</h4>
+      <p class="note">“Na escala” liga o colaborador ao nome usado na escala de plantões (para preencher sábados, domingos e férias automaticamente).</p>
+      ${emps.map((e, i) => `<div class="emp-row">
+        <div><label>Nome completo</label><input data-hremp-f="name" data-i="${i}" value="${esc(e.name)}"></div>
+        <div><label>Cargo</label><input data-hremp-f="role" data-i="${i}" value="${esc(e.role)}"></div>
+        <div><label>Na escala</label><div class="links">${cfg.people.map((p, pi) => `<label class="check" style="margin:0"><input type="checkbox" data-hrlink="${i}|${pi}" ${e.links.includes(pi) ? "checked" : ""}> ${esc(p)}</label>`).join("")}</div></div>
+        <div class="emp-btns">${i > 0 ? `<button class="secondary small" data-hrup="${i}">↑</button>` : ""}<button class="danger small" data-hrdelemp="${i}">Remover</button></div>
+      </div>`).join("")}
+      <div class="actions"><button class="secondary small" id="hrAddEmp">+ Colaborador</button></div>
+
+      <h4>Horários semanais por período</h4>
+      <p class="note">Para cada colaborador: a linha <b>“Trabalha no fim de semana”</b> vale nas semanas em que ele tem sábado ou domingo na escala; a linha <b>“Folga no fim de semana”</b> vale nas outras semanas. Feriados, férias, sábados e domingos são preenchidos sozinhos.</p>
+      ${periods.map(([p, pi]) => `<div class="regime">
+        <div class="grid3">
+          <div><label>Nome do período</label><input data-hrper-f="name" data-i="${pi}" value="${esc(p.name)}"></div>
+          <div><label>Vale a partir de</label><input type="date" data-hrper-f="start" data-i="${pi}" value="${p.start}"></div>
+          <div style="display:flex;align-items:flex-end;justify-content:flex-end">${cfg.hr.periods.length > 1 ? `<button class="danger small" data-hrdelper="${pi}">Remover período</button>` : ""}</div>
+        </div>
+        <div class="hr-scroll"><table class="tpl"><thead><tr><th>Colaborador</th><th>Semana</th>${WD.map(d => `<th>${d}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+        ${emps.map(e => { const t = p.t[e.id] || (p.t[e.id] = { work: ["", "", "", "", ""], off: ["", "", "", "", ""] });
+          return ["work", "off"].map((k, ki) => `<tr>${ki === 0 ? `<td rowspan="2" class="nm">${esc(e.name)}</td>` : ""}<td class="kind">${k === "work" ? "Trabalha no fim de semana" : "Folga no fim de semana"}</td>
+            ${t[k].map((v, di) => `<td><select data-hrtpl="${pi}|${e.id}|${k}|${di}"><option value=""></option>${opt(v)}</select></td>`).join("")}
+            <td class="kind">${t[k].reduce((s, v) => s + valHours(v), 0)}h</td></tr>`).join(""); }).join("")}
+        </tbody></table></div>
+      </div>`).join("")}
+      <div class="actions"><button class="secondary small" id="hrAddPer">+ Novo período (copia o último)</button></div>
+
+      <h4>Tabela de horários</h4>
+      <p class="note">As horas são calculadas pelo início, fim e intervalo. Marque HO para aparecer como “HO - código”.</p>
+      <div class="hr-scroll"><table class="tpl codes"><thead><tr><th>Código</th><th>Descrição</th><th>Início</th><th>Fim</th><th>Intervalo (h)</th><th>HO</th><th>Horas</th><th></th></tr></thead><tbody>
+      ${cfg.hr.codes.map((c, i) => `<tr>
+        <td><input data-hrcode-f="id" data-i="${i}" value="${esc(c.id)}" style="width:64px"></td>
+        <td><input data-hrcode-f="desc" data-i="${i}" value="${esc(c.desc)}"></td>
+        <td><input type="time" data-hrcode-f="start" data-i="${i}" value="${c.start}"></td>
+        <td><input type="time" data-hrcode-f="end" data-i="${i}" value="${c.end}"></td>
+        <td><input type="number" min="0" step="0.5" data-hrcode-f="brk" data-i="${i}" value="${c.brk}" style="width:70px"></td>
+        <td><input type="checkbox" data-hrcode-f="ho" data-i="${i}" ${c.ho ? "checked" : ""}></td>
+        <td><b>${codeHours(c)}h</b></td>
+        <td><button class="danger small" data-hrdelcode="${i}">×</button></td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="actions"><button class="secondary small" id="hrAddCode">+ Horário</button></div>
+    </details>`;
+  }
+
+  function hrTSV(withHeader) {
+    const days = monthDays();
+    const rows = [];
+    if (withHeader) { rows.push(["Nome", ...days.map(hdrDate)]); rows.push(["", ...days.map(d => DAYABBR[d.getDay()])]); }
+    cfg.hr.employees.forEach(e => {
+      const r = days.map(d => label(hrValue(e, d).v));
+      rows.push(withHeader ? [e.name, ...r] : r);
+    });
+    return rows;
+  }
+  async function copyText(txt) {
+    try { await navigator.clipboard.writeText(txt); return true; } catch (e) {}
+    const ta = document.createElement("textarea"); ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (e) {} ta.remove(); return ok;
+  }
+  function onHRClick(e) {
+    const cell = e.target.closest("td.hc");
+    if (cell) { hrState.editCell = cell.dataset.hremp + "|" + cell.dataset.hrdate; renderHR(); const s = document.querySelector(".cellsel"); if (s) s.focus(); return; }
+    const t = e.target.closest("button"); if (!t) return;
+    const ri = (a) => +t.dataset[a];
+    if (t.id === "hrCopyCodes" || t.id === "hrCopyAll") {
+      copyText(hrTSV(t.id === "hrCopyAll").map(r => r.join("\t")).join("\r\n")).then(ok => toast(ok ? "Copiado! Agora é só colar no controle do RH" : "Não consegui copiar — use o CSV"));
+    }
+    else if (t.id === "hrCsv") {
+      const csv = "﻿" + hrTSV(true).map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+      download(`escala-rh-${state.year}-${pad(state.month + 1)}.csv`, csv, "text/csv;charset=utf-8;");
+    }
+    else if (t.id === "hrClearMonth") {
+      if (!confirm("Remover todos os ajustes manuais deste mês?")) return;
+      const pre = `${state.year}-${pad(state.month + 1)}-`;
+      Object.values(cfg.hr.overrides).forEach(o => Object.keys(o).forEach(k => { if (k.startsWith(pre)) delete o[k]; }));
+      saveConfig("Ajustes do mês removidos");
+    }
+    else if (t.id === "hrAddEmp") { cfg.hr.employees.push({ id: "e" + Date.now().toString(36), name: "NOVO COLABORADOR", role: "", links: [] }); saveConfig("Colaborador adicionado"); }
+    else if (t.dataset.hrdelemp !== undefined) { const i = ri("hrdelemp"); if (confirm(`Remover ${cfg.hr.employees[i].name} da escala RH?`)) { cfg.hr.employees.splice(i, 1); saveConfig("Colaborador removido"); } }
+    else if (t.dataset.hrup !== undefined) { const i = ri("hrup"); const a = cfg.hr.employees; [a[i - 1], a[i]] = [a[i], a[i - 1]]; saveConfig("Ordem alterada"); }
+    else if (t.id === "hrAddPer") {
+      const last = clone([...cfg.hr.periods].sort((a, b) => a.start.localeCompare(b.start)).pop());
+      last.name = "Novo período"; last.start = iso(addDays(parse(last.start), 31));
+      cfg.hr.periods.push(last); saveConfig("Período criado");
+    }
+    else if (t.dataset.hrdelper !== undefined) { if (confirm("Remover este período?")) { cfg.hr.periods.splice(ri("hrdelper"), 1); saveConfig("Período removido"); } }
+    else if (t.id === "hrAddCode") {
+      const n = Math.max(0, ...cfg.hr.codes.map(c => parseInt(c.id) || 0)) + 1;
+      cfg.hr.codes.push({ id: String(n), desc: "Novo horário", start: "08:00", end: "17:00", brk: 1, ho: false }); saveConfig("Horário adicionado");
+    }
+    else if (t.dataset.hrdelcode !== undefined) { const i = ri("hrdelcode"); if (confirm(`Remover o horário ${cfg.hr.codes[i].id}?`)) { cfg.hr.codes.splice(i, 1); saveConfig("Horário removido"); } }
+  }
+  function onHRChange(e) {
+    const t = e.target;
+    if (t.classList.contains("cellsel")) {
+      const id = t.dataset.hremp, d = t.dataset.hrdate;
+      const o = cfg.hr.overrides[id] || (cfg.hr.overrides[id] = {});
+      if (t.value === "__auto") delete o[d]; else o[d] = t.value;
+      hrState.editCell = null; saveConfig("Célula ajustada"); return;
+    }
+    if (t.dataset.hrlink) {
+      const [i, pi] = t.dataset.hrlink.split("|").map(Number); const L = cfg.hr.employees[i].links;
+      if (t.checked && !L.includes(pi)) L.push(pi); if (!t.checked) cfg.hr.employees[i].links = L.filter(x => x !== pi);
+      return saveConfig("Vínculo atualizado");
+    }
+    if (t.dataset.hrtpl) {
+      const [pi, id, k, di] = t.dataset.hrtpl.split("|");
+      cfg.hr.periods[+pi].t[id][k][+di] = t.value; return saveConfig("Horário atualizado");
+    }
+    if (t.dataset.hrperF === "start" || t.dataset.hrcodeF) {
+      if (t.dataset.hrperF) cfg.hr.periods[+t.dataset.i].start = t.value;
+      else { const c = cfg.hr.codes[+t.dataset.i], f = t.dataset.hrcodeF; c[f] = t.type === "checkbox" ? t.checked : f === "brk" ? +t.value : t.value.trim(); }
+      return saveConfig("Atualizado");
+    }
+    if (t.dataset.hrperF || t.dataset.hrempF) return saveConfig("Atualizado");
+  }
+  function onHRInput(e) {
+    const t = e.target;
+    if (t.dataset.hrempF) { cfg.hr.employees[+t.dataset.i][t.dataset.hrempF] = t.value; saveConfig(false, true); }
+    else if (t.dataset.hrperF === "name") { cfg.hr.periods[+t.dataset.i].name = t.value; saveConfig(false, true); }
+    else if (t.dataset.hrcodeF === "desc") { cfg.hr.codes[+t.dataset.i].desc = t.value; saveConfig(false, true); }
   }
 
   // ---------- Login ----------
@@ -885,7 +1274,8 @@
       ? `<span class="who">👤 ${esc(user)}</span><button class="ghost small" id="logoutBtn">Sair</button>`
       : `<button class="ghost small" id="loginBtn">Entrar</button>`;
     $("tabConfigBtn").classList.toggle("hidden", !user);
-    if (!user && state.tab === "config") setTab("painel");
+    $("tabRhBtn").classList.toggle("hidden", !user);
+    if (!user && (state.tab === "config" || state.tab === "rh")) setTab("painel");
   }
   $("userbox").addEventListener("click", e => {
     if (e.target.id === "loginBtn") { $("loginModal").classList.remove("hidden"); $("lgErr").textContent = ""; $("lgUser").focus(); }
@@ -938,9 +1328,9 @@
   function setTab(tab) {
     state.tab = tab;
     document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-    ["painel", "calendario", "config"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab));
+    ["painel", "calendario", "rh", "config"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab));
   }
-  function renderViews() { yearButtons(); renderNow(); renderYear(); renderCalendar(); }
+  function renderViews() { yearButtons(); renderNow(); renderYear(); renderCalendar(); renderHR(); }
 
   // ---------- Eventos ----------
   document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setTab(b.dataset.tab); });
@@ -959,9 +1349,17 @@
   $("configPanel").addEventListener("change", e => {
     if (e.target.id !== "importFile" || !e.target.files[0]) return;
     const r = new FileReader();
-    r.onload = () => { try { const data = JSON.parse(r.result); if (!data.people || !data.regimes || !data.anchors || !data.regimes[0].groups) throw 0; cfg = Object.assign(clone(DEFAULT_CONFIG), data); saveConfig("Configuração importada"); renderConfig(); } catch (x) { alert("Arquivo inválido."); } };
+    r.onload = () => { try { const data = JSON.parse(r.result); if (!data.people || !data.regimes || !data.anchors || !data.regimes[0].groups) throw 0; cfg = migrate(data); saveConfig("Configuração importada"); renderConfig(); } catch (x) { alert("Arquivo inválido."); } };
     r.readAsText(e.target.files[0]);
   });
+  $("hrPanel").addEventListener("click", onHRClick);
+  $("hrPanel").addEventListener("change", onHRChange);
+  $("hrPanel").addEventListener("input", onHRInput);
+  $("hrPanel").addEventListener("toggle", e => { if (e.target.id === "hrCfgDetails") hrState.cfgOpen = e.target.open; }, true);
+  $("hrPanel").addEventListener("focusout", e => { if (e.target.classList.contains("cellsel")) setTimeout(() => { if (hrState.editCell) { hrState.editCell = null; renderHR(); } }, 150); });
+  $("hrMonth").addEventListener("change", e => { state.month = +e.target.value; renderViews(); });
+  $("hrPrev").addEventListener("click", () => $("calPrev").click());
+  $("hrNext").addEventListener("click", () => $("calNext").click());
   $("printBtn").addEventListener("click", () => window.print());
   $("csvBtn").addEventListener("click", () => {
     const rows = [["Sábado", "Domingo", "Escala", "Colaborador", "Função", "Sábado (horário)", "Domingo (horário)", "Sobreaviso", "Feriado", "Férias", "Troca manual"]];
