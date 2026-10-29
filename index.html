@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escala de Plantões — NOC</title>
+<style>
+  :root {
+    --navy: #24476a; --navy2: #376da0;
+    --s0: #e5edf7; --s0-text: #24476a;
+    --s1: #fce8e8; --s1-text: #a62d36;
+    --s2: #e3f2e7; --s2-text: #286641;
+    --sun: #eee8fb; --sun-text: #6545a3;
+    --ink: #243247; --muted: #65758b; --line: #dce3ec;
+    --bg: #f3f6fa; --white: #fff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, "Segoe UI", Arial, sans-serif; }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { background: linear-gradient(135deg, var(--navy), var(--navy2)); color: #fff; padding: 22px 26px; border-radius: 18px; margin-bottom: 16px; box-shadow: 0 8px 24px #24476a20; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0 0 6px; font-size: clamp(1.3rem, 3vw, 1.9rem); }
+  header p { margin: 0; color: #e3edf8; }
+  .userbox { display: flex; align-items: center; gap: 10px; font-size: .9rem; }
+  .userbox .who { background: #ffffff22; padding: 7px 11px; border-radius: 999px; }
+  button { border: 0; border-radius: 10px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+  .primary { background: var(--navy); color: #fff; }
+  .secondary { background: #e9eef5; color: var(--navy); }
+  .ghost { background: #ffffff; color: var(--navy); }
+  .danger { background: #fce8e8; color: #a62d36; }
+  .small { padding: 6px 10px; font-size: .8rem; border-radius: 8px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+  .tab.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .panel { background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 18px; box-shadow: 0 3px 12px #263b5310; }
+  .panel h2 { margin: 0 0 4px; font-size: 1.1rem; }
+  .panel .lead { color: var(--muted); margin: 0 0 16px; font-size: .9rem; }
+  .row-between { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .yearbtns { display: flex; gap: 6px; }
+  .yearbtns button.active { background: var(--navy); color: #fff; }
+  label { display: block; color: var(--muted); font-size: .8rem; font-weight: 650; margin-bottom: 5px; }
+  input, select { width: 100%; min-width: 0; border: 1px solid #ccd6e2; border-radius: 9px; padding: 9px 10px; background: #fff; color: var(--ink); font: inherit; }
+  input[type=checkbox] { width: auto; }
+  input:focus, select:focus { outline: 2px solid #9ebfe5; border-color: #6f9bcd; }
+  .pill { display: inline-block; border-radius: 999px; padding: 5px 10px; font-size: .76rem; font-weight: 750; }
+  .c0 { background: var(--s0); color: var(--s0-text); }
+  .c1 { background: var(--s1); color: var(--s1-text); }
+  .c2 { background: var(--s2); color: var(--s2-text); }
+  .csun { background: var(--sun); color: var(--sun-text); }
+  .hidden { display: none !important; }
+
+  /* Semana vigente */
+  .now-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .now-head h2 { font-size: 1.25rem; }
+  .badge { background: #e7eef7; color: var(--navy); font-weight: 800; border-radius: 8px; padding: 6px 9px; font-size: .78rem; }
+  .now-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .slot-card { border-radius: 14px; border: 1px solid var(--line); overflow: hidden; display: flex; flex-direction: column; }
+  .slot-top { padding: 12px 14px; font-weight: 800; font-size: .8rem; letter-spacing: .03em; text-transform: uppercase; }
+  .slot-body { padding: 14px; flex: 1; }
+  .slot-name { font-size: 1.35rem; font-weight: 800; margin-bottom: 10px; }
+  .slot-line { display: flex; justify-content: space-between; gap: 8px; font-size: .88rem; padding: 6px 0; border-top: 1px dashed var(--line); }
+  .slot-line span:first-child { color: var(--muted); }
+  .slot-line b { text-align: right; }
+  .next { margin-top: 14px; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; font-size: .88rem; display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: center; }
+  .notice { margin-top: 12px; padding: 11px 14px; background: #fff7e6; border: 1px solid #f3dfb3; color: #7a5410; border-radius: 12px; font-size: .86rem; }
+
+  /* Previsão anual */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; align-items: center; font-size: .82rem; }
+  .legend .lname { color: var(--muted); font-weight: 700; margin-right: 4px; }
+  .months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+  .month { border: 1px solid #b9c7d8; border-radius: 10px; overflow: hidden; }
+  .month h3 { margin: 0; padding: 10px 12px; font-size: .95rem; background: #4f81c7; color: #0d2340; border-bottom: 1px solid #3c6aa8; text-transform: uppercase; text-align: center; letter-spacing: .03em; }
+  .wk { border-bottom: 6px solid #f3f6fa; }
+  .wk:last-child { border-bottom: 0; }
+  .wk-title { background: #dbe5f1; text-align: center; font-weight: 800; font-size: .74rem; padding: 6px; text-transform: uppercase; border-bottom: 1px solid #b9c7d8; }
+  .wk-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  .wk-days { border-right: 1px solid #b9c7d8; }
+  .dhead { text-align: center; font-weight: 800; font-size: .82rem; padding: 5px; border-bottom: 1px solid #e3e9f1; }
+  .wk-days .dhead:not(:first-child) { border-top: 1.5px solid #8796a8; }
+  .ln { display: flex; justify-content: space-between; gap: 6px; padding: 4px 10px; font-size: .8rem; }
+  .ln span { color: var(--muted); white-space: nowrap; }
+  .ln b { text-align: right; overflow: hidden; text-overflow: ellipsis; }
+  .ln.hol { background: #fff4e0; } .ln.hol span { color: #8a5a00; font-weight: 800; }
+  .wk-on { display: flex; flex-direction: column; }
+  .on-h { background: #f28b8b; color: #5c0d12; font-weight: 800; font-size: .74rem; text-align: center; padding: 6px 4px; }
+  .on-n { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 750; font-size: .9rem; padding: 8px; text-align: center; }
+  .wk.current { box-shadow: inset 0 0 0 2px #e0a400; }
+  .wk.current .wk-title { background: #ffe9a8; }
+  .wk.clickable { cursor: pointer; }
+  .wk.clickable:hover .wk-title { background: #c9d8ec; }
+  .chip { border-radius: 6px; padding: 3px 7px; font-size: .74rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .chol { background: #fff0d1; color: #8a5a00; }
+  .cal td.holiday { background: #fffaf0; }
+  .group-edit { border: 1px dashed #c9d4e1; border-radius: 10px; padding: 10px; margin-top: 12px; background: #fff; }
+  .flag { font-size: .68rem; color: #a26b00; font-weight: 800; }
+
+  /* Calendário */
+  .cal-nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cal-nav select { width: auto; }
+  .cal-scroll { overflow-x: auto; margin-top: 14px; }
+  table.cal { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  .cal th { font-size: .75rem; color: var(--muted); text-transform: uppercase; padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--line); }
+  .cal th:first-child { width: 130px; }
+  .cal td { vertical-align: top; border-bottom: 1px solid #eef2f7; border-right: 1px solid #eef2f7; padding: 6px; height: 92px; }
+  .cal td.other { background: #fafbfd; color: #b3bfcd; }
+  .cal td.today { outline: 2px solid var(--navy2); outline-offset: -2px; }
+  .cal td.weekend { background: #fcfdff; }
+  .cal tr.current td { background: #fffbea; }
+  .cal .dnum { font-size: .8rem; font-weight: 800; margin-bottom: 4px; }
+  .cal .chip { display: block; margin-bottom: 3px; white-space: normal; line-height: 1.3; }
+  .cal .plcell { background: #fffafa; }
+
+  /* Config */
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .sect { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 16px; }
+  .sect h3 { margin: 0 0 4px; font-size: 1rem; }
+  .sect .lead { margin-bottom: 12px; }
+  .regime { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: #fbfcfe; }
+  .slot-edit { border-left: 4px solid; padding: 10px 12px; border-radius: 8px; background: #fff; margin-top: 10px; }
+  .slot-edit.s0 { border-color: #6f9bcd; } .slot-edit.s1 { border-color: #d4646d; } .slot-edit.s2 { border-color: #5aa874; }
+  .check { display: flex; gap: 7px; align-items: center; font-size: .85rem; color: var(--ink); margin-top: 24px; font-weight: 600; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .list { margin: 10px 0 0; padding: 0; list-style: none; }
+  .list li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 6px; font-size: .85rem; background: #fff; }
+  .note { color: var(--muted); font-size: .84rem; line-height: 1.5; }
+
+  /* Login */
+  .modal-bg { position: fixed; inset: 0; background: #1a2a3d80; display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+  .modal { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 20px 50px #0003; }
+  .modal h2 { margin: 0 0 16px; }
+  .modal .field { margin-bottom: 12px; }
+  .pwd { position: relative; }
+  .pwd input { padding-right: 44px; }
+  .eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; padding: 6px 9px; font-size: 1rem; }
+  .eye.on { background: #e9eef5; }
+  .err { color: #a62d36; font-size: .85rem; min-height: 1.2em; margin: 4px 0 10px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .88rem; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 860px) { .months { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 680px) { .now-grid, .grid3, .months { grid-template-columns: 1fr; } .wrap { padding: 14px 16px 32px; } header { padding: 18px; } }
+  @media print {
+    body { background: #fff; }
+    .wrap { max-width: none; padding: 0; }
+    .tabs, .userbox, .yearbtns, .cal-nav, #tab-config, .no-print { display: none !important; }
+    .panel, .month { break-inside: avoid; box-shadow: none; }
+    * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Escala de Plantões — NOC</h1>
+      <p>Rodízio semanal • sábado, domingo e sobreaviso</p>
+    </div>
+    <div class="userbox" id="userbox"></div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="painel">Painel</button>
+    <button class="tab" data-tab="calendario">Calendário</button>
+    <button class="tab hidden" data-tab="config" id="tabConfigBtn">Configurar escala</button>
+  </nav>
+
+  <!-- PAINEL -->
+  <section id="tab-painel">
+    <div class="panel" id="nowPanel"></div>
+    <div class="panel">
+      <div class="row-between">
+        <div>
+          <h2>Previsão anual</h2>
+          <p class="lead" style="margin:0">Todos os fins de semana do ano, com quem trabalha em cada horário e quem está de plantão.</p>
+        </div>
+        <div class="yearbtns" data-years></div>
+      </div>
+      <div id="yearLegend"></div>
+      <div class="months" id="months"></div>
+      <div class="actions no-print">
+        <button class="secondary small" id="printBtn">Imprimir / salvar em PDF</button>
+        <button class="secondary small" id="csvBtn">Baixar ano em CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CALENDÁRIO -->
+  <section id="tab-calendario" class="hidden">
+    <div class="panel">
+      <div class="row-between">
+        <div>
+          <h2>Calendário</h2>
+          <p class="lead" style="margin:0">Visão mês a mês. A primeira coluna mostra quem está de sobreaviso na semana.</p>
+        </div>
+        <div class="cal-nav">
+          <div class="yearbtns" data-years></div>
+          <button class="secondary small" id="calPrev">◀</button>
+          <select id="calMonth"></select>
+          <button class="secondary small" id="calNext">▶</button>
+        </div>
+      </div>
+      <div id="calLegend"></div>
+      <div class="cal-scroll"><table class="cal" id="calTable"></table></div>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="tab-config" class="hidden">
+    <div class="panel" id="configPanel"></div>
+  </section>
+</div>
+
+<div class="modal-bg hidden" id="loginModal">
+  <div class="modal" id="loginForm">
+    <h2>Entrar</h2>
+    <div class="field"><label for="lgUser">Usuário</label><input id="lgUser" autocomplete="username" required></div>
+    <div class="field"><label for="lgPass">Senha</label>
+      <div class="pwd"><input id="lgPass" type="password" autocomplete="current-password"><button type="button" class="eye" id="lgEye" title="Mostrar senha" aria-label="Mostrar senha">👁</button></div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="lgShow"> Mostrar senha</label>
+    </div>
+    <div class="err" id="lgErr"></div>
+    <div class="actions" style="margin-top:0">
+      <button type="button" class="primary" id="lgSubmit">Entrar</button>
+      <button type="button" class="secondary" id="lgCancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const STORE_KEY = "escalaNOC.config.v3";
+  const SESSION_KEY = "escalaNOC.user";
+  const YEARS = [2026, 2027];
+  const USERS = {
+    wanessa: "5b2f50d159cbf46f94c77ffd45bbff7fae5910977838ffe53be816f6ed11aebd",
+    maycon:  "a6d874c84c2b701ea5f78994e66da43263f8fb6d2dc1df9ec0dcbd09a6992731"
+  };
+
+  // ---------- Configuração padrão ----------
+  // Cada escala tem "grupos de rodízio". Dentro de um grupo, quem está na posição 1 vai para a 2
+  // na semana seguinte, da 2 para a 3 ... e da última volta para a 1.
+  const DEFAULT_CONFIG = {
+    people: ["Wanessa", "Jorge", "Gabriel", "Felipe", "Heitor"],
+    regimes: [
+      { name: "Escala atual", start: "2026-01-01", groups: [
+        { id: "manha", name: "Revezamento do sábado de manhã", slots: [
+          { name: "Sábado de manhã", sat: "8h às 12h", sun: "", oncall: false },
+          { name: "Folga", sat: "", sun: "", oncall: false }
+        ]},
+        { id: "plantao", name: "Rodízio do plantão", slots: [
+          { name: "Sábado à tarde", sat: "12h às 16h", sun: "", oncall: false },
+          { name: "Plantonista", sat: "", sun: "9h às 13h", oncall: true },
+          { name: "Folga", sat: "", sun: "", oncall: false }
+        ]}
+      ]},
+      { name: "Escala reduzida", start: "2026-12-01", groups: [
+        { id: "plantao", name: "Rodízio do plantão", slots: [
+          { name: "Sábado de manhã", sat: "8h às 12h", sun: "", oncall: false },
+          { name: "Plantonista", sat: "12h às 16h", sun: "Somente sobreaviso", oncall: true },
+          { name: "Folga", sat: "", sun: "", oncall: false }
+        ]}
+      ]}
+    ],
+    // Pontos de partida do rodízio (segunda-feira da semana). order[posição] = índice do colaborador.
+    anchors: [
+      { date: "2026-09-28", group: "manha",   order: [0, 1] },     // 03/out: Wanessa de manhã
+      { date: "2026-09-28", group: "plantao", order: [2, 4, 3] },  // 03/out: Gabriel tarde, Heitor plantão, Felipe folga
+      { date: "2026-11-02", group: "manha",   order: [0, 1] },     // 07/nov: Wanessa de manhã
+      { date: "2026-11-02", group: "plantao", order: [3, 2, 4] }   // 07/nov: Felipe tarde, Gabriel plantão, Heitor folga
+    ],
+    overrides: {},  // { "AAAA-MM-DD": { grupo: order } }
+    holidays: [
+      { date: "2026-01-01", name: "Confraternização Universal" }, { date: "2026-02-16", name: "Carnaval" }, { date: "2026-02-17", name: "Carnaval" },
+      { date: "2026-04-03", name: "Sexta-feira Santa" }, { date: "2026-04-21", name: "Tiradentes" }, { date: "2026-05-01", name: "Dia do Trabalho" },
+      { date: "2026-06-04", name: "Corpus Christi" }, { date: "2026-09-07", name: "Independência" }, { date: "2026-10-12", name: "N. Sra. Aparecida" },
+      { date: "2026-11-02", name: "Finados" }, { date: "2026-11-15", name: "Proclamação da República" }, { date: "2026-11-20", name: "Consciência Negra" },
+      { date: "2026-12-25", name: "Natal" },
+      { date: "2027-01-01", name: "Confraternização Universal" }, { date: "2027-02-08", name: "Carnaval" }, { date: "2027-02-09", name: "Carnaval" },
+      { date: "2027-03-26", name: "Sexta-feira Santa" }, { date: "2027-04-21", name: "Tiradentes" }, { date: "2027-05-01", name: "Dia do Trabalho" },
+      { date: "2027-05-27", name: "Corpus Christi" }, { date: "2027-09-07", name: "Independência" }, { date: "2027-10-12", name: "N. Sra. Aparecida" },
+      { date: "2027-11-02", name: "Finados" }, { date: "2027-11-15", name: "Proclamação da República" }, { date: "2027-11-20", name: "Consciência Negra" },
+      { date: "2027-12-25", name: "Natal" }
+    ]
+  };
+
+  const clone = o => JSON.parse(JSON.stringify(o));
+  function loadConfig() {
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) return Object.assign(clone(DEFAULT_CONFIG), JSON.parse(raw)); } catch (e) {}
+    return clone(DEFAULT_CONFIG);
+  }
+  let cfg = loadConfig();
+  function saveConfig(msg) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(cfg)); } catch (e) {}
+    renderViews();
+    if (msg !== false) toast(msg || "Alterações salvas");
+  }
+
+  let user = null;
+  try { user = sessionStorage.getItem(SESSION_KEY); } catch (e) {}
+  const state = { tab: "painel", year: YEARS.includes(new Date().getFullYear()) ? new Date().getFullYear() : YEARS[0], month: new Date().getMonth(), editWeek: null };
+
+  // ---------- Datas ----------
+  const pad = n => String(n).padStart(2, "0");
+  const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = s => new Date(s + "T12:00:00");
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const mondayOf = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); return addDays(x, -((x.getDay() + 6) % 7)); };
+  const weeksBetween = (a, b) => Math.round((b - a) / (7 * 864e5));
+  const mod = (n, m) => ((n % m) + m) % m;
+  const dm = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+  const dShort = d => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+  const dPrint = d => `${d.getDate()}-${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}.`;
+  const monthName = (y, m) => new Date(y, m, 1).toLocaleDateString("pt-BR", { month: "long" });
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const today = new Date();
+
+  // ---------- Regras ----------
+  const holidayOf = d => cfg.holidays.find(h => h.date === iso(d));
+  const pname = i => cfg.people[i] ?? "—";
+  const slotCls = sl => sl.oncall ? "c1" : (sl.sat || sl.sun) ? "c0" : "c2";
+  function regimeFor(date) {
+    const key = iso(date);
+    const sorted = [...cfg.regimes].sort((a, b) => a.start.localeCompare(b.start));
+    let r = sorted[0];
+    sorted.forEach(x => { if (x.start <= key) r = x; });
+    return r;
+  }
+  function normalize(order, n) {
+    const o = order.filter(i => i < cfg.people.length).slice(0, n);
+    for (let i = 0; o.length < n && i < cfg.people.length; i++) if (!o.includes(i)) o.push(i);
+    return o;
+  }
+  function groupOrder(groupId, n, monday) {
+    const key = iso(monday);
+    if (cfg.overrides[key] && cfg.overrides[key][groupId]) return normalize(cfg.overrides[key][groupId], n);
+    const list = cfg.anchors.filter(a => a.group === groupId).sort((a, b) => a.date.localeCompare(b.date));
+    if (!list.length) return normalize([], n);
+    let a = list[0];
+    list.forEach(x => { if (x.date <= key) a = x; });
+    const base = normalize(a.order, n);
+    const w = weeksBetween(parse(a.date), monday);
+    return base.map((_, s) => base[mod(s - w, n)]);
+  }
+  // Monta a semana: lista de atribuições {slot, person, group}
+  function week(monday) {
+    const sat = addDays(monday, 5), sun = addDays(monday, 6);
+    const reg = regimeFor(sat);
+    const key = iso(monday);
+    const items = [];
+    reg.groups.forEach(g => {
+      const order = groupOrder(g.id, g.slots.length, monday);
+      g.slots.forEach((sl, s) => items.push({ slot: sl, person: order[s], group: g, pos: s }));
+    });
+    const oncall = items.filter(x => x.slot.oncall);
+    const satH = holidayOf(sat), sunH = holidayOf(sun);
+    const satWork = satH ? [] : items.filter(x => x.slot.sat).sort((a, b) => a.slot.sat.localeCompare(b.slot.sat, "pt-BR", { numeric: true }));
+    const sunWork = sunH ? [] : items.filter(x => x.slot.sun);
+    const off = items.filter(x => !x.slot.sat && !x.slot.sun && !x.slot.oncall);
+    return { monday, sat, sun, reg, key, items, oncall, satH, sunH, satWork, sunWork, off, overridden: !!cfg.overrides[key] };
+  }
+  const oncallNames = w => w.oncall.map(x => pname(x.person)).join(" / ") || "—";
+  function weeksOfYear(y) {
+    let sat = new Date(y, 0, 1, 12);
+    while (sat.getDay() !== 6) sat = addDays(sat, 1);
+    const list = [];
+    for (; sat.getFullYear() === y; sat = addDays(sat, 7)) list.push(week(addDays(sat, -5)));
+    return list;
+  }
+
+  // ---------- Painel: semana vigente ----------
+  function renderNow() {
+    const cur = week(mondayOf(today));
+    const nxt = week(addDays(cur.monday, 7));
+    const nextRole = p => { const it = nxt.items.find(x => x.person === p); return it ? it.slot.name : "Fora da escala"; };
+    const working = cur.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall)
+      .sort((a, b) => (a.slot.oncall - b.slot.oncall) || (a.slot.sat || "~").localeCompare(b.slot.sat || "~", "pt-BR", { numeric: true }));
+    const dayVal = (h, v) => h ? `Feriado (${esc(h.name)})` : esc(v || "—");
+    const cards = working.map(x => {
+      const sl = x.slot;
+      const lines = [
+        ["Sábado " + dm(cur.sat), cur.satH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sat || "—")],
+        ["Domingo " + dm(cur.sun), cur.sunH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sun || "—")],
+        ["Sobreaviso na semana", sl.oncall ? "Sim" : "Não"],
+        ["Próxima semana", nextRole(x.person)]
+      ];
+      return `<div class="slot-card"><div class="slot-top ${slotCls(sl)}">${esc(sl.name)}</div>
+        <div class="slot-body"><div class="slot-name">${esc(pname(x.person))}</div>
+        ${lines.map(l => `<div class="slot-line"><span>${l[0]}</span><b>${esc(l[1])}</b></div>`).join("")}</div></div>`;
+    }).join("");
+    const offCard = cur.off.length ? `<div class="slot-card"><div class="slot-top c2">Folga no fim de semana</div><div class="slot-body">
+      ${cur.off.map(x => `<div class="slot-name" style="margin-bottom:4px">${esc(pname(x.person))}</div><div class="slot-line" style="margin-bottom:10px"><span>Próxima semana</span><b>${esc(nextRole(x.person))}</b></div>`).join("")}
+      </div></div>` : "";
+    const outside = cfg.people.map((_, i) => i).filter(i => !cur.items.some(x => x.person === i));
+    const hol = [cur.satH && `sábado ${dm(cur.sat)} é feriado (${esc(cur.satH.name)})`, cur.sunH && `domingo ${dm(cur.sun)} é feriado (${esc(cur.sunH.name)})`].filter(Boolean);
+    const upcoming = [...cfg.regimes].filter(r => r.start > iso(cur.sat)).sort((a, b) => a.start.localeCompare(b.start))[0];
+    let notice = "";
+    if (hol.length) notice += `<div class="notice"><b>Atenção:</b> ${hol.join(" e ")} — sem escala de trabalho; ${esc(oncallNames(cur))} fica de plantão o dia todo.</div>`;
+    if (upcoming && (parse(upcoming.start) - today) < 120 * 864e5) {
+      const sl = upcoming.groups.flatMap(g => g.slots);
+      notice += `<div class="notice"><b>Mudança de escala a partir de ${parse(upcoming.start).toLocaleDateString("pt-BR")}:</b> ${esc(upcoming.name)} — ${sl.map(x => `${esc(x.name)}${x.sat ? " (sáb " + esc(x.sat) + ")" : ""}${x.sun ? " (dom " + esc(x.sun) + ")" : ""}`).join(" • ")}</div>`;
+    }
+    $("nowPanel").innerHTML = `
+      <div class="now-head">
+        <div><h2>Semana vigente</h2><p class="lead" style="margin:0">${dShort(cur.monday)} a ${dShort(cur.sun)} • ${esc(cur.reg.name)}${cur.overridden ? " • <b>com troca manual</b>" : ""}</p></div>
+        <span class="badge">Sobreaviso: ${esc(oncallNames(cur))}</span>
+      </div>
+      <div class="now-grid">${cards}${offCard}</div>
+      ${outside.length ? `<p class="note" style="margin:10px 0 0">Fora da escala nesta semana: ${outside.map(i => esc(pname(i))).join(", ")}</p>` : ""}
+      <div class="next"><b>Próxima semana (${dShort(nxt.sat)} e ${dShort(nxt.sun)}):</b>
+        ${nxt.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall).map(x => `<span class="pill ${slotCls(x.slot)}">${esc(x.slot.name)}: ${esc(pname(x.person))}</span>`).join("")}
+      </div>${notice}`;
+  }
+
+  // ---------- Legendas ----------
+  function legendHTML(year) {
+    const used = [];
+    weeksOfYear(year).forEach(w => { if (!used.includes(w.reg)) used.push(w.reg); });
+    return used.map(r => `<div class="legend"><span class="lname">${esc(r.name)} (desde ${parse(r.start).toLocaleDateString("pt-BR")}):</span>
+      ${r.groups.flatMap(g => g.slots).filter(sl => sl.sat || sl.sun || sl.oncall).map(sl => `<span class="pill ${slotCls(sl)}">${esc(sl.name)}${sl.sat ? " • sáb " + esc(sl.sat) : ""}${sl.sun ? " • dom " + esc(sl.sun) : ""}${sl.oncall ? " • sobreaviso" : ""}</span>`).join("")}</div>`).join("")
+      + `<div class="legend"><span class="pill chol">Feriado: sem escala de trabalho, plantão o dia todo</span></div>`;
+  }
+  function yearButtons() {
+    document.querySelectorAll("[data-years]").forEach(box => {
+      box.innerHTML = YEARS.map(y => `<button class="secondary small ${y === state.year ? "active" : ""}" data-year="${y}">${y}</button>`).join("");
+    });
+  }
+
+  // ---------- Previsão anual (formato da planilha) ----------
+  function dayBlock(date, h, work, which, w) {
+    const rows = h
+      ? `<div class="ln hol"><span>Feriado</span><b>${esc(h.name)}</b></div>`
+      : work.length ? work.map(x => `<div class="ln"><span>${esc(x.slot[which])}</span><b>${esc(pname(x.person))}</b></div>`).join("")
+      : `<div class="ln"><span>—</span><b>Sem expediente</b></div>`;
+    return `<div class="dhead">${dPrint(date)}</div>${rows}`;
+  }
+  function renderYear() {
+    $("yearLegend").innerHTML = legendHTML(state.year);
+    const curKey = iso(mondayOf(today));
+    const byMonth = {};
+    weeksOfYear(state.year).forEach(w => { (byMonth[w.sat.getMonth()] ||= []).push(w); });
+    const canEdit = !!user;
+    $("months").innerHTML = Object.keys(byMonth).map(m => `
+      <div class="month"><h3>${monthName(state.year, +m)}</h3>
+        ${byMonth[m].map(w => `<div class="wk ${w.key === curKey ? "current" : ""} ${canEdit ? "clickable" : ""}" data-week="${w.key}" title="${canEdit ? "Clique para editar esta semana" : ""}">
+          <div class="wk-title">Escala de finais de semana${w.overridden ? ' <span class="flag">• TROCA</span>' : ""}</div>
+          <div class="wk-body">
+            <div class="wk-days">${dayBlock(w.sat, w.satH, w.satWork, "sat", w)}${dayBlock(w.sun, w.sunH, w.sunWork, "sun", w)}</div>
+            <div class="wk-on"><div class="on-h">SOBREAVISO</div><div class="on-n">${esc(oncallNames(w))}</div></div>
+          </div>
+        </div>`).join("")}
+      </div>`).join("");
+  }
+
+  // ---------- Calendário ----------
+  function renderCalendar() {
+    $("calLegend").innerHTML = legendHTML(state.year);
+    $("calMonth").innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(state.year, m)}</option>`).join("");
+    const first = new Date(state.year, state.month, 1, 12);
+    let mon = mondayOf(first);
+    const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+    let html = `<thead><tr><th>Sobreaviso</th>${days.map(d => `<th>${d}</th>`).join("")}</tr></thead><tbody>`;
+    const curKey = iso(mondayOf(today));
+    do {
+      const w = week(mon);
+      html += `<tr class="${w.key === curKey ? "current" : ""}"><td class="plcell">${w.oncall.map(x => `<span class="chip c1">${esc(pname(x.person))}</span>`).join("")}<div class="note" style="font-size:.72rem">${esc(w.reg.name)}${w.overridden ? " • troca" : ""}</div></td>`;
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(mon, i);
+        const h = holidayOf(d);
+        const cls = [d.getMonth() !== state.month ? "other" : "", iso(d) === iso(today) ? "today" : "", i >= 5 ? "weekend" : "", h ? "holiday" : ""].join(" ");
+        let chips = "";
+        if (h) chips = `<span class="chip chol">Feriado: ${esc(h.name)}</span>${w.oncall.map(x => `<span class="chip c1">Plantão o dia todo • ${esc(pname(x.person))}</span>`).join("")}`;
+        else if (i === 5) chips = w.satWork.map(x => `<span class="chip ${slotCls(x.slot)}">${esc(x.slot.sat)} • ${esc(pname(x.person))}</span>`).join("");
+        else if (i === 6) chips = w.sunWork.map(x => `<span class="chip ${/sobreaviso/i.test(x.slot.sun) ? "csun" : slotCls(x.slot)}">${esc(x.slot.sun)} • ${esc(pname(x.person))}</span>`).join("");
+        if (i === 5 && w.off.length) chips += `<span class="chip c2">Folga • ${w.off.map(x => esc(pname(x.person))).join(", ")}</span>`;
+        html += `<td class="${cls}"><div class="dnum">${d.getDate()}</div>${chips}</td>`;
+      }
+      html += "</tr>";
+      mon = addDays(mon, 7);
+    } while (mon.getMonth() === state.month);
+    $("calTable").innerHTML = html + "</tbody>";
+  }
+
+  // ---------- Configuração (logado) ----------
+  const personOptions = sel => cfg.people.map((p, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${esc(p)}</option>`).join("");
+  function regimeLabel(id) { for (const r of cfg.regimes) { const g = r.groups.find(x => x.id === id); if (g) return g.name; } return id; }
+
+  function renderConfig() {
+    if (!user) { $("configPanel").innerHTML = ""; return; }
+    const ew = week(state.editWeek ? parse(state.editWeek) : mondayOf(today));
+    const anchorsSorted = [...cfg.anchors].sort((a, b) => a.date.localeCompare(b.date) || a.group.localeCompare(b.group));
+    const ovKeys = Object.keys(cfg.overrides).sort();
+    const hols = [...cfg.holidays].sort((a, b) => a.date.localeCompare(b.date));
+    $("configPanel").innerHTML = `
+      <h2>Configurar escala</h2>
+      <p class="lead">Conectado como <b>${esc(user)}</b>. As alterações são salvas automaticamente neste navegador.</p>
+
+      <div class="sect" style="border:0;margin-top:0;padding-top:0">
+        <h3>Colaboradores</h3>
+        <div class="grid4">${cfg.people.map((p, i) => `<div><label>Colaborador ${i + 1}</label><input data-person="${i}" value="${esc(p)}"></div>`).join("")}</div>
+        <div class="actions"><button class="secondary small" id="addPerson">+ Colaborador</button>${cfg.people.length > 1 ? `<button class="danger small" id="delPerson">Remover o último</button>` : ""}</div>
+      </div>
+
+      <div class="sect">
+        <h3>Trocar quem está em cada função</h3>
+        <p class="lead note">Escolha a semana e defina quem fica em cada posição. “Só esta semana” é uma troca pontual; “Desta semana em diante” reinicia o rodízio a partir daqui. Dica: na previsão anual, clique em uma semana para abri-la aqui.</p>
+        <div class="grid4"><div><label>Semana (qualquer dia)</label><input type="date" id="ewDate" value="${ew.key}"></div></div>
+        ${ew.reg.groups.map(g => {
+          const order = groupOrder(g.id, g.slots.length, ew.monday);
+          return `<div class="slot-edit s0" style="margin-top:12px"><label style="color:var(--ink)">${esc(g.name)}</label><div class="grid4">
+            ${g.slots.map((sl, s) => `<div><label>${esc(sl.name)}</label><select data-ewgroup="${g.id}" data-ewslot="${s}" data-prev="${order[s]}">${personOptions(order[s])}</select></div>`).join("")}
+          </div></div>`; }).join("")}
+        <p class="note" style="margin:8px 0 0">Fim de semana ${dShort(ew.sat)} e ${dShort(ew.sun)} • ${esc(ew.reg.name)}${ew.overridden ? " • <b>já tem troca manual</b>" : ""}</p>
+        <div class="actions">
+          <button class="primary small" id="ewOnce">Salvar só esta semana</button>
+          <button class="secondary small" id="ewFwd">Desta semana em diante</button>
+        </div>
+        ${ovKeys.length ? `<p class="note" style="margin-top:14px"><b>Trocas pontuais:</b></p><ul class="list">${ovKeys.map(k => {
+          const w = week(parse(k)); return `<li><span>${dShort(w.sat)}/${w.sat.getFullYear()} — ${w.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall).map(x => `${esc(x.slot.name)}: ${esc(pname(x.person))}`).join(" • ")}</span><button class="danger small" data-delov="${k}">Remover</button></li>`; }).join("")}</ul>` : ""}
+        <p class="note" style="margin-top:14px"><b>Pontos de início do rodízio:</b></p>
+        <ul class="list">${anchorsSorted.map((a, i) => `<li><span>A partir de ${parse(a.date).toLocaleDateString("pt-BR")} — ${esc(regimeLabel(a.group))}: ${a.order.map((p, s) => `pos. ${s + 1} = ${esc(pname(p))}`).join(" • ")}</span><button class="danger small" data-delanchor="${a.date}|${a.group}">Remover</button></li>`).join("")}</ul>
+      </div>
+
+      <div class="sect">
+        <h3>Feriados</h3>
+        <p class="lead note">Em feriado não há escala de trabalho: o plantonista da semana fica de plantão o dia todo. Inclua também feriados estaduais ou municipais.</p>
+        <div class="grid4">
+          <div><label>Data</label><input type="date" id="holDate"></div>
+          <div><label>Nome</label><input id="holName" placeholder="ex.: Aniversário da cidade"></div>
+          <div style="display:flex;align-items:flex-end"><button class="primary small" id="addHol">Adicionar feriado</button></div>
+        </div>
+        <ul class="list hol-list">${hols.map(h => `<li><span>${parse(h.date).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })} — ${esc(h.name)}</span><button class="danger small" data-delhol="${h.date}">Remover</button></li>`).join("")}</ul>
+      </div>
+
+      <div class="sect">
+        <h3>Escalas e horários</h3>
+        <p class="lead note">Cada escala vale a partir da data de início (pelo sábado da semana). Em cada grupo o rodízio anda uma posição por semana: <b>posição 1 → 2 → 3 → … → 1</b>. Deixe o horário vazio quando não houver expediente naquele dia.</p>
+        ${cfg.regimes.map((r, ri) => `<div class="regime">
+          <div class="grid3">
+            <div><label>Nome da escala</label><input data-reg="${ri}" data-f="name" value="${esc(r.name)}"></div>
+            <div><label>Vale a partir de</label><input type="date" data-reg="${ri}" data-f="start" value="${r.start}"></div>
+            <div style="display:flex;align-items:flex-end;justify-content:flex-end">${cfg.regimes.length > 1 ? `<button class="danger small" data-delreg="${ri}">Remover escala</button>` : ""}</div>
+          </div>
+          ${r.groups.map((g, gi) => `<div class="group-edit">
+            <div class="grid3"><div><label>Grupo de rodízio</label><input data-reg="${ri}" data-group="${gi}" data-f="name" value="${esc(g.name)}"></div>
+              <div style="display:flex;align-items:flex-end;gap:6px;grid-column:span 2;flex-wrap:wrap">
+                <button class="secondary small" data-addslot="${ri}|${gi}">+ Posição</button>
+                ${g.slots.length > 1 ? `<button class="secondary small" data-delslot="${ri}|${gi}">− Posição</button>` : ""}
+                ${r.groups.length > 1 ? `<button class="danger small" data-delgroup="${ri}|${gi}">Remover grupo</button>` : ""}
+              </div></div>
+            ${g.slots.map((sl, s) => `<div class="slot-edit ${sl.oncall ? "s1" : (sl.sat || sl.sun) ? "s0" : "s2"}"><div class="grid4">
+              <div><label>Posição ${s + 1} — nome</label><input data-reg="${ri}" data-group="${gi}" data-slot="${s}" data-f="name" value="${esc(sl.name)}"></div>
+              <div><label>Sábado</label><input data-reg="${ri}" data-group="${gi}" data-slot="${s}" data-f="sat" value="${esc(sl.sat)}" placeholder="ex.: 8h às 12h"></div>
+              <div><label>Domingo</label><input data-reg="${ri}" data-group="${gi}" data-slot="${s}" data-f="sun" value="${esc(sl.sun)}" placeholder="ex.: 9h às 13h"></div>
+              <div><label class="check"><input type="checkbox" data-reg="${ri}" data-group="${gi}" data-slot="${s}" data-f="oncall" ${sl.oncall ? "checked" : ""}> Sobreaviso na semana</label></div>
+            </div></div>`).join("")}
+          </div>`).join("")}
+          <div class="actions"><button class="secondary small" data-addgroup="${ri}">+ Grupo de rodízio</button></div>
+        </div>`).join("")}
+        <div class="actions"><button class="secondary small" id="addReg">+ Nova escala (copia a última)</button></div>
+      </div>
+
+      <div class="sect">
+        <h3>Backup</h3>
+        <p class="lead note">Exporte a configuração para guardar ou enviar para outra pessoa importar no navegador dela.</p>
+        <div class="actions">
+          <button class="secondary small" id="exportCfg">Exportar configuração</button>
+          <button class="secondary small" id="importCfg">Importar configuração</button>
+          <button class="danger small" id="resetCfg">Restaurar padrão</button>
+          <input type="file" id="importFile" accept="application/json,.json" class="hidden">
+        </div>
+      </div>`;
+  }
+
+  function onConfigInput(e) {
+    const t = e.target;
+    if (t.dataset.person !== undefined) { cfg.people[+t.dataset.person] = t.value.trim() || `Colaborador ${+t.dataset.person + 1}`; return saveConfig(false); }
+    if (t.dataset.reg !== undefined && t.dataset.f) {
+      const r = cfg.regimes[+t.dataset.reg];
+      let obj = r;
+      if (t.dataset.group !== undefined) obj = r.groups[+t.dataset.group];
+      if (t.dataset.slot !== undefined) obj = obj.slots[+t.dataset.slot];
+      obj[t.dataset.f] = t.type === "checkbox" ? t.checked : t.value.trim();
+      return saveConfig(false);
+    }
+  }
+  function onConfigChange(e) {
+    const t = e.target;
+    if (t.id === "ewDate" && t.value) { state.editWeek = iso(mondayOf(parse(t.value))); renderConfig(); return; }
+    if (t.dataset.ewslot !== undefined) {
+      // Troca dentro do grupo: quem estava na posição escolhida assume a posição antiga
+      const sels = [...document.querySelectorAll(`[data-ewgroup="${t.dataset.ewgroup}"]`)];
+      const p = +t.value, old = +t.dataset.prev;
+      const other = sels.find(x => x !== t && +x.value === p);
+      if (other) { other.value = old; other.dataset.prev = old; }
+      t.dataset.prev = p;
+      return;
+    }
+    if (["start", "oncall", "sat", "sun"].includes(t.dataset.f)) renderConfig();
+    if (t.dataset.person !== undefined) {
+      const i = +t.dataset.person;
+      document.querySelectorAll(`[data-ewslot] option[value="${i}"]`).forEach(o => o.textContent = cfg.people[i]);
+      toast("Colaborador atualizado");
+    }
+    else if (t.dataset.reg !== undefined) toast("Escala atualizada");
+  }
+  function onConfigClick(e) {
+    const t = e.target.closest("button"); if (!t) return;
+    const ewKey = () => iso(mondayOf(parse($("ewDate").value || iso(today))));
+    const ewOrders = () => {
+      const o = {};
+      document.querySelectorAll("[data-ewgroup]").forEach(x => { (o[x.dataset.ewgroup] ||= [])[+x.dataset.ewslot] = +x.value; });
+      return o;
+    };
+    const rg = s => s.split("|").map(Number);
+    if (t.id === "ewOnce") { cfg.overrides[ewKey()] = ewOrders(); saveConfig("Troca salva para esta semana"); renderConfig(); }
+    else if (t.id === "ewFwd") {
+      const k = ewKey(), o = ewOrders();
+      Object.keys(o).forEach(g => { cfg.anchors = cfg.anchors.filter(a => !(a.date === k && a.group === g)).concat([{ date: k, group: g, order: o[g] }]); });
+      Object.keys(cfg.overrides).forEach(x => { if (x >= k) delete cfg.overrides[x]; });
+      saveConfig("Rodízio reiniciado a partir desta semana"); renderConfig();
+    }
+    else if (t.dataset.delov) { delete cfg.overrides[t.dataset.delov]; saveConfig("Troca removida"); renderConfig(); }
+    else if (t.dataset.delanchor) { const [d, g] = t.dataset.delanchor.split("|"); cfg.anchors = cfg.anchors.filter(a => !(a.date === d && a.group === g)); saveConfig("Ponto de início removido"); renderConfig(); }
+    else if (t.id === "addHol") {
+      const d = $("holDate").value; if (!d) return toast("Escolha a data do feriado");
+      cfg.holidays = cfg.holidays.filter(h => h.date !== d).concat([{ date: d, name: $("holName").value.trim() || "Feriado" }]);
+      saveConfig("Feriado adicionado"); renderConfig();
+    }
+    else if (t.dataset.delhol) { cfg.holidays = cfg.holidays.filter(h => h.date !== t.dataset.delhol); saveConfig("Feriado removido"); renderConfig(); }
+    else if (t.id === "addPerson") { cfg.people.push(`Colaborador ${cfg.people.length + 1}`); saveConfig("Colaborador adicionado"); renderConfig(); }
+    else if (t.id === "delPerson") {
+      const i = cfg.people.length - 1;
+      if (confirm(`Remover ${cfg.people[i]}? Se ele estiver em algum rodízio, outra pessoa ocupa o lugar.`)) { cfg.people.pop(); saveConfig("Colaborador removido"); renderConfig(); }
+    }
+    else if (t.dataset.addslot) { const [ri, gi] = rg(t.dataset.addslot); cfg.regimes[ri].groups[gi].slots.push({ name: "Folga", sat: "", sun: "", oncall: false }); saveConfig("Posição adicionada"); renderConfig(); }
+    else if (t.dataset.delslot) { const [ri, gi] = rg(t.dataset.delslot); cfg.regimes[ri].groups[gi].slots.pop(); saveConfig("Posição removida"); renderConfig(); }
+    else if (t.dataset.delgroup) { const [ri, gi] = rg(t.dataset.delgroup); if (confirm("Remover este grupo de rodízio?")) { cfg.regimes[ri].groups.splice(gi, 1); saveConfig("Grupo removido"); renderConfig(); } }
+    else if (t.dataset.addgroup) {
+      const r = cfg.regimes[+t.dataset.addgroup];
+      r.groups.push({ id: "g" + Date.now().toString(36), name: "Novo grupo", slots: [{ name: "Sábado de manhã", sat: "8h às 12h", sun: "", oncall: false }, { name: "Folga", sat: "", sun: "", oncall: false }] });
+      saveConfig("Grupo criado — defina quem participa em “Trocar quem está em cada função”"); renderConfig();
+    }
+    else if (t.dataset.delreg) { if (confirm("Remover esta escala?")) { cfg.regimes.splice(+t.dataset.delreg, 1); saveConfig("Escala removida"); renderConfig(); } }
+    else if (t.id === "addReg") {
+      const last = clone([...cfg.regimes].sort((a, b) => a.start.localeCompare(b.start)).pop());
+      last.name = "Nova escala"; last.start = iso(addDays(parse(last.start), 31));
+      cfg.regimes.push(last); saveConfig("Nova escala criada"); renderConfig();
+    }
+    else if (t.id === "exportCfg") download("escala-noc-config.json", JSON.stringify(cfg, null, 2), "application/json");
+    else if (t.id === "importCfg") $("importFile").click();
+    else if (t.id === "resetCfg") { if (confirm("Restaurar a configuração padrão? As alterações serão perdidas.")) { cfg = clone(DEFAULT_CONFIG); saveConfig("Configuração restaurada"); renderConfig(); } }
+  }
+
+  // ---------- Login ----------
+  function sha256(str) {
+    const rr = (v, a) => (v >>> a) | (v << (32 - a));
+    const K = [], H = []; let p = 2;
+    for (let c = 0; c < 64; p++) {
+      let prime = true; for (let i = 2; i * i <= p; i++) if (p % i === 0) { prime = false; break; }
+      if (prime) { if (c < 8) H[c] = (Math.pow(p, 1 / 2) * 4294967296) | 0; K[c++] = (Math.pow(p, 1 / 3) * 4294967296) | 0; }
+    }
+    const bytes = new TextEncoder().encode(str), l = bytes.length;
+    const total = Math.ceil((l + 9) / 64) * 64;
+    const m = new Uint8Array(total); m.set(bytes); m[l] = 0x80;
+    const dv = new DataView(m.buffer);
+    dv.setUint32(total - 4, (l * 8) >>> 0); dv.setUint32(total - 8, Math.floor(l * 8 / 4294967296));
+    let h = H.slice(); const w = new Array(64);
+    for (let i = 0; i < total; i += 64) {
+      for (let t = 0; t < 16; t++) w[t] = dv.getUint32(i + t * 4);
+      for (let t = 16; t < 64; t++) {
+        const s0 = rr(w[t - 15], 7) ^ rr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
+        const s1 = rr(w[t - 2], 17) ^ rr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
+        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+      }
+      let [a, b, c, d, e, f, g, hh] = h;
+      for (let t = 0; t < 64; t++) {
+        const t1 = (hh + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[t] + w[t]) | 0;
+        const t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      h = [a, b, c, d, e, f, g, hh].map((v, k) => (v + h[k]) | 0);
+    }
+    return h.map(v => (v >>> 0).toString(16).padStart(8, "0")).join("");
+  }
+  function renderUser() {
+    $("userbox").innerHTML = user
+      ? `<span class="who">👤 ${esc(user)}</span><button class="ghost small" id="logoutBtn">Sair</button>`
+      : `<button class="ghost small" id="loginBtn">Entrar</button>`;
+    $("tabConfigBtn").classList.toggle("hidden", !user);
+    if (!user && state.tab === "config") setTab("painel");
+  }
+  $("userbox").addEventListener("click", e => {
+    if (e.target.id === "loginBtn") { $("loginModal").classList.remove("hidden"); $("lgErr").textContent = ""; $("lgUser").focus(); }
+    if (e.target.id === "logoutBtn") { user = null; try { sessionStorage.removeItem(SESSION_KEY); } catch (x) {} renderUser(); renderViews(); renderConfig(); toast("Você saiu"); }
+  });
+  $("lgCancel").addEventListener("click", () => $("loginModal").classList.add("hidden"));
+  function setShow(on) {
+    $("lgPass").type = on ? "text" : "password";
+    $("lgShow").checked = on; $("lgEye").classList.toggle("on", on);
+    $("lgEye").title = on ? "Ocultar senha" : "Mostrar senha";
+  }
+  $("lgShow").addEventListener("change", e => setShow(e.target.checked));
+  $("lgEye").addEventListener("click", () => setShow($("lgPass").type === "password"));
+  ["lgUser", "lgPass"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doLogin(); } }));
+  $("lgSubmit").addEventListener("click", doLogin);
+  function doLogin() {
+    const u = $("lgUser").value.trim().toLowerCase(), p = $("lgPass").value.trim();
+    if (USERS[u] && USERS[u] === sha256(u + ":" + p)) {
+      user = u; try { sessionStorage.setItem(SESSION_KEY, u); } catch (x) {}
+      $("loginModal").classList.add("hidden"); $("lgPass").value = "";
+      renderUser(); renderViews(); renderConfig(); setTab("config"); toast("Bem-vindo(a), " + u);
+      setShow(false);
+    } else $("lgErr").textContent = "Usuário ou senha incorretos.";
+  }
+
+  // ---------- Utilidades ----------
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); }
+  function download(name, content, type) {
+    const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  }
+  function setTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+    ["painel", "calendario", "config"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab));
+  }
+  function renderViews() { yearButtons(); renderNow(); renderYear(); renderCalendar(); }
+
+  // ---------- Eventos ----------
+  document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setTab(b.dataset.tab); });
+  document.addEventListener("click", e => { const b = e.target.closest("[data-year]"); if (b) { state.year = +b.dataset.year; renderViews(); } });
+  $("calMonth").addEventListener("change", e => { state.month = +e.target.value; renderCalendar(); });
+  $("calPrev").addEventListener("click", () => { if (state.month === 0) { if (state.year > YEARS[0]) { state.year--; state.month = 11; } } else state.month--; renderViews(); });
+  $("calNext").addEventListener("click", () => { if (state.month === 11) { if (state.year < YEARS[YEARS.length - 1]) { state.year++; state.month = 0; } } else state.month++; renderViews(); });
+  $("months").addEventListener("click", e => {
+    const w = e.target.closest("[data-week]"); if (!w || !user) return;
+    state.editWeek = w.dataset.week; renderConfig(); setTab("config");
+    setTimeout(() => $("ewDate")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+  });
+  $("configPanel").addEventListener("input", onConfigInput);
+  $("configPanel").addEventListener("change", onConfigChange);
+  $("configPanel").addEventListener("click", onConfigClick);
+  $("configPanel").addEventListener("change", e => {
+    if (e.target.id !== "importFile" || !e.target.files[0]) return;
+    const r = new FileReader();
+    r.onload = () => { try { const data = JSON.parse(r.result); if (!data.people || !data.regimes || !data.anchors || !data.regimes[0].groups) throw 0; cfg = Object.assign(clone(DEFAULT_CONFIG), data); saveConfig("Configuração importada"); renderConfig(); } catch (x) { alert("Arquivo inválido."); } };
+    r.readAsText(e.target.files[0]);
+  });
+  $("printBtn").addEventListener("click", () => window.print());
+  $("csvBtn").addEventListener("click", () => {
+    const rows = [["Sábado", "Domingo", "Escala", "Colaborador", "Função", "Sábado (horário)", "Domingo (horário)", "Sobreaviso", "Feriado", "Troca manual"]];
+    weeksOfYear(state.year).forEach(w => w.items.forEach(x => rows.push([
+      w.sat.toLocaleDateString("pt-BR"), w.sun.toLocaleDateString("pt-BR"), w.reg.name, pname(x.person), x.slot.name,
+      w.satH ? (x.slot.oncall ? "Feriado - plantão o dia todo" : "Feriado") : (x.slot.sat || "-"),
+      w.sunH ? (x.slot.oncall ? "Feriado - plantão o dia todo" : "Feriado") : (x.slot.sun || "-"),
+      x.slot.oncall ? "Sim" : "Não", [w.satH, w.sunH].filter(Boolean).map(h => h.name).join(" / ") || "-", w.overridden ? "Sim" : "Não"])));
+    const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    download(`escala-plantoes-noc-${state.year}.csv`, csv, "text/csv;charset=utf-8;");
+  });
+
+  renderUser(); renderViews(); renderConfig();
+})();
+</script>
+</body>
+</html>
