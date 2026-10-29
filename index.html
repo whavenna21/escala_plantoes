@@ -20,6 +20,9 @@
   header { background: linear-gradient(135deg, var(--navy), var(--navy2)); color: #fff; padding: 22px 26px; border-radius: 18px; margin-bottom: 16px; box-shadow: 0 8px 24px #24476a20; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   header h1 { margin: 0 0 6px; font-size: clamp(1.3rem, 3vw, 1.9rem); }
   header p { margin: 0; color: #e3edf8; }
+  .sync { display: inline-block; margin-top: 10px; font-size: .75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #ffffff22; }
+  .sync.ok::before { content: "● "; color: #7be0a0; } .sync.wait::before { content: "● "; color: #ffd36b; }
+  .sync.err { background: #a62d36; } .sync.local::before { content: "● "; color: #c9d6e6; }
   .userbox { display: flex; align-items: center; gap: 10px; font-size: .9rem; }
   .userbox .who { background: #ffffff22; padding: 7px 11px; border-radius: 999px; }
   button { border: 0; border-radius: 10px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
@@ -158,6 +161,7 @@
     <div>
       <h1>Escala de Plantões — NOC</h1>
       <p>Rodízio semanal • sábado, domingo e sobreaviso</p>
+      <span class="sync local" id="syncState">Modo local — salvo só neste navegador</span>
     </div>
     <div class="userbox" id="userbox"></div>
   </header>
@@ -237,6 +241,28 @@
   const STORE_KEY = "escalaNOC.config.v3";
   const SESSION_KEY = "escalaNOC.user";
   const YEARS = [2026, 2027];
+  // ================= FIREBASE =================
+  // Cole aqui a configuração do seu projeto (Console do Firebase > Configurações do projeto > Seus apps > Web).
+  // Enquanto "apiKey" estiver vazio, a página funciona em modo local (salva só no navegador).
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyClROCsU-TTWQ7SvOmnMbAC0EinV4-9mJs",
+    authDomain: "escala-plantoes-e1d1d.firebaseapp.com",
+    projectId: "escala-plantoes-e1d1d",
+    storageBucket: "escala-plantoes-e1d1d.firebasestorage.app",
+    messagingSenderId: "1042452556056",
+    appId: "1:1042452556056:web:759dce1c6bd70a61f4d66d"
+  };
+  // E-mail usado no Firebase Authentication para cada usuário (o login aceita só o nome).
+  const USER_EMAILS = {
+    wanessa: "wanessa@evaconnect.com.br",
+    maycon: "maycon@evaconnect.com.br"
+  };
+  const FB_VERSION = "10.12.2";
+  const FB_ON = !!FIREBASE_CONFIG.apiKey;
+  let fb = null;          // { auth, db, ref, setDoc, signIn, signOut, serverTimestamp }
+  let lastSynced = "";    // última versão vinda/enviada ao Firestore
+  // ============================================
+
   const USERS = {
     wanessa: "5b2f50d159cbf46f94c77ffd45bbff7fae5910977838ffe53be816f6ed11aebd",
     maycon:  "a6d874c84c2b701ea5f78994e66da43263f8fb6d2dc1df9ec0dcbd09a6992731"
@@ -295,36 +321,81 @@
   };
 
   const clone = o => JSON.parse(JSON.stringify(o));
+  function migrate(saved) {
+    const c = Object.assign(clone(DEFAULT_CONFIG), saved);
+    // Correção: remove os pontos de início de 02/11/2026 que repetiam a semana de 31/10
+    if (!saved.fix1) {
+      const old = { manha: "0,1", plantao: "3,2,4" };
+      c.anchors = c.anchors.filter(a => !(a.date === "2026-11-02" && old[a.group] === a.order.join(",")));
+      c.fix1 = true;
+    }
+    if (!saved.fix2) {
+      c.regimes.forEach(r => { if (r.name === "Escala reduzida") r.name = "Nova escala — conforme legislação vigente"; });
+      c.fix2 = true;
+    }
+    return c;
+  }
   function loadConfig() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        const c = Object.assign(clone(DEFAULT_CONFIG), saved);
-        // Correção: remove os pontos de início de 02/11/2026 que repetiam a semana de 31/10
-        if (!saved.fix1) {
-          const old = { manha: "0,1", plantao: "3,2,4" };
-          c.anchors = c.anchors.filter(a => !(a.date === "2026-11-02" && old[a.group] === a.order.join(",")));
-          c.fix1 = true;
-        }
-        if (!saved.fix2) {
-          c.regimes.forEach(r => { if (r.name === "Escala reduzida") r.name = "Nova escala — conforme legislação vigente"; });
-          c.fix2 = true;
-        }
-        return c;
-      }
-    } catch (e) {}
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) {}
     return clone(DEFAULT_CONFIG);
   }
   let cfg = loadConfig();
+  let pushTimer = null;
   function saveConfig(msg) {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(cfg)); } catch (e) {}
+    if (FB_ON) { clearTimeout(pushTimer); setSync("saving"); pushTimer = setTimeout(pushRemote, 700); }
     renderViews();
     if (msg !== false) toast(msg || "Alterações salvas");
   }
 
   let user = null;
-  try { user = sessionStorage.getItem(SESSION_KEY); } catch (e) {}
+  if (!FB_ON) { try { user = sessionStorage.getItem(SESSION_KEY); } catch (e) {} }
+
+  // ---------- Sincronização com o Firebase ----------
+  function setSync(st, extra) {
+    const el = $("syncState"); if (!el) return;
+    const map = { local: ["Modo local — salvo só neste navegador", "local"], loading: ["Carregando escala…", "wait"], ok: ["Escala sincronizada", "ok"],
+      saving: ["Salvando…", "wait"], error: ["Erro de conexão" + (extra ? ": " + extra : ""), "err"] };
+    const [t, c] = map[st] || map.local;
+    el.textContent = t; el.className = "sync " + c;
+  }
+  async function pushRemote() {
+    if (!fb || !user) return;
+    const data = JSON.stringify(cfg);
+    try {
+      lastSynced = data;
+      await fb.setDoc(fb.ref, { data, updatedBy: user, updatedAt: fb.serverTimestamp() });
+      setSync("ok");
+    } catch (e) { setSync("error", e.code || e.message); toast("Não foi possível salvar no Firebase"); }
+  }
+  async function initFirebase() {
+    setSync("loading");
+    try {
+      const base = `https://www.gstatic.com/firebasejs/${FB_VERSION}/`;
+      const [appM, authM, fsM] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-auth.js"), import(base + "firebase-firestore.js")]);
+      const app = appM.initializeApp(FIREBASE_CONFIG);
+      const auth = authM.getAuth(app), db = fsM.getFirestore(app);
+      fb = { auth, db, ref: fsM.doc(db, "escala", "config"), setDoc: fsM.setDoc, serverTimestamp: fsM.serverTimestamp,
+        signIn: (e, p) => authM.signInWithEmailAndPassword(auth, e, p), signOut: () => authM.signOut(auth) };
+      authM.onAuthStateChanged(auth, u => {
+        user = u ? (Object.keys(USER_EMAILS).find(k => USER_EMAILS[k] === u.email) || u.email.split("@")[0]) : null;
+        renderUser(); renderViews(); renderConfig();
+      });
+      fsM.onSnapshot(fb.ref, snap => {
+        if (!snap.exists()) { setSync("ok"); return; }   // ainda não salvo: usa o padrão até o primeiro ajuste
+        const { data, updatedBy } = snap.data();
+        if (!data || data === lastSynced) { setSync("ok"); return; }
+        lastSynced = data;
+        try { cfg = migrate(JSON.parse(data)); } catch (e) { return; }
+        try { localStorage.setItem(STORE_KEY, data); } catch (e) {}
+        renderViews();
+        const editing = document.activeElement && $("configPanel").contains(document.activeElement);
+        if (!editing) renderConfig();
+        setSync("ok");
+        if (updatedBy && updatedBy !== user && !snap.metadata.hasPendingWrites) toast(`Escala atualizada por ${updatedBy}`);
+      }, e => setSync("error", e.code || e.message));
+    } catch (e) { setSync("error", e.message); }
+  }
   const state = { tab: "painel", year: YEARS.includes(new Date().getFullYear()) ? new Date().getFullYear() : YEARS[0], month: new Date().getMonth(), editWeek: null };
 
   // ---------- Datas ----------
@@ -580,7 +651,7 @@
     const hols = [...cfg.holidays].sort((a, b) => a.date.localeCompare(b.date));
     $("configPanel").innerHTML = `
       <h2>Configurar escala</h2>
-      <p class="lead">Conectado como <b>${esc(user)}</b>. As alterações são salvas automaticamente neste navegador.</p>
+      <p class="lead">Conectado como <b>${esc(user)}</b>. ${FB_ON ? "As alterações são salvas automaticamente no Firebase e aparecem para toda a equipe." : "As alterações são salvas automaticamente neste navegador."}</p>
 
       <div class="sect" style="border:0;margin-top:0;padding-top:0">
         <h3>Colaboradores</h3>
@@ -810,7 +881,10 @@
   }
   $("userbox").addEventListener("click", e => {
     if (e.target.id === "loginBtn") { $("loginModal").classList.remove("hidden"); $("lgErr").textContent = ""; $("lgUser").focus(); }
-    if (e.target.id === "logoutBtn") { user = null; try { sessionStorage.removeItem(SESSION_KEY); } catch (x) {} renderUser(); renderViews(); renderConfig(); toast("Você saiu"); }
+    if (e.target.id === "logoutBtn") {
+      if (fb) { fb.signOut(); toast("Você saiu"); return; }
+      user = null; try { sessionStorage.removeItem(SESSION_KEY); } catch (x) {} renderUser(); renderViews(); renderConfig(); toast("Você saiu");
+    }
   });
   $("lgCancel").addEventListener("click", () => $("loginModal").classList.add("hidden"));
   function setShow(on) {
@@ -822,8 +896,22 @@
   $("lgEye").addEventListener("click", () => setShow($("lgPass").type === "password"));
   ["lgUser", "lgPass"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doLogin(); } }));
   $("lgSubmit").addEventListener("click", doLogin);
-  function doLogin() {
+  async function doLogin() {
     const u = $("lgUser").value.trim().toLowerCase(), p = $("lgPass").value.trim();
+    if (FB_ON) {
+      if (!fb) { $("lgErr").textContent = "Conectando ao Firebase, tente de novo em instantes."; return; }
+      const email = u.includes("@") ? u : USER_EMAILS[u];
+      if (!email) { $("lgErr").textContent = "Usuário ou senha incorretos."; return; }
+      $("lgErr").textContent = "Entrando…";
+      try {
+        await fb.signIn(email, p);
+        $("loginModal").classList.add("hidden"); $("lgPass").value = ""; $("lgErr").textContent = "";
+        setShow(false); setTab("config"); toast("Bem-vindo(a), " + u.split("@")[0]);
+      } catch (e) {
+        $("lgErr").textContent = /network/.test(e.code || "") ? "Sem conexão com o Firebase." : /too-many/.test(e.code || "") ? "Muitas tentativas. Aguarde alguns minutos." : "Usuário ou senha incorretos.";
+      }
+      return;
+    }
     if (USERS[u] && USERS[u] === sha256(u + ":" + p)) {
       user = u; try { sessionStorage.setItem(SESSION_KEY, u); } catch (x) {}
       $("loginModal").classList.add("hidden"); $("lgPass").value = "";
@@ -879,6 +967,7 @@
   });
 
   renderUser(); renderViews(); renderConfig();
+  if (FB_ON) initFirebase(); else setSync("local");
 })();
 </script>
 </body>
