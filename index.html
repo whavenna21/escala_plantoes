@@ -242,7 +242,7 @@
   // Cada escala tem "grupos de rodízio". Dentro de um grupo, quem está na posição 1 vai para a 2
   // na semana seguinte, da 2 para a 3 ... e da última volta para a 1.
   const DEFAULT_CONFIG = {
-    people: ["Wanessa", "Jorge", "Gabriel", "Felipe", "Heitor"],
+    people: ["Wanessa", "Jorge/Marcos", "Gabriel", "Felipe", "Heitor"],
     regimes: [
       { name: "Escala atual", start: "2026-01-01", groups: [
         { id: "manha", name: "Revezamento do sábado de manhã", slots: [
@@ -255,7 +255,7 @@
           { name: "Folga", sat: "", sun: "", oncall: false }
         ]}
       ]},
-      { name: "Escala reduzida", start: "2026-12-01", groups: [
+      { name: "Nova escala — conforme legislação vigente", start: "2026-12-01", groups: [
         { id: "plantao", name: "Rodízio do plantão", slots: [
           { name: "Sábado de manhã", sat: "8h às 12h", sun: "", oncall: false },
           { name: "Plantonista", sat: "12h às 16h", sun: "Somente sobreaviso", oncall: true },
@@ -266,10 +266,9 @@
     // Pontos de partida do rodízio (segunda-feira da semana). order[posição] = índice do colaborador.
     anchors: [
       { date: "2026-09-28", group: "manha",   order: [0, 1] },     // 03/out: Wanessa de manhã
-      { date: "2026-09-28", group: "plantao", order: [2, 4, 3] },  // 03/out: Gabriel tarde, Heitor plantão, Felipe folga
-      { date: "2026-11-02", group: "manha",   order: [0, 1] },     // 07/nov: Wanessa de manhã
-      { date: "2026-11-02", group: "plantao", order: [3, 2, 4] }   // 07/nov: Felipe tarde, Gabriel plantão, Heitor folga
+      { date: "2026-09-28", group: "plantao", order: [2, 4, 3] }   // 03/out: Gabriel tarde, Heitor plantão, Felipe folga
     ],
+    fix1: true, fix2: true,
     overrides: {},  // { "AAAA-MM-DD": { grupo: order } }
     holidays: [
       { date: "2026-01-01", name: "Confraternização Universal" }, { date: "2026-02-16", name: "Carnaval" }, { date: "2026-02-17", name: "Carnaval" },
@@ -287,7 +286,24 @@
 
   const clone = o => JSON.parse(JSON.stringify(o));
   function loadConfig() {
-    try { const raw = localStorage.getItem(STORE_KEY); if (raw) return Object.assign(clone(DEFAULT_CONFIG), JSON.parse(raw)); } catch (e) {}
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const c = Object.assign(clone(DEFAULT_CONFIG), saved);
+        // Correção: remove os pontos de início de 02/11/2026 que repetiam a semana de 31/10
+        if (!saved.fix1) {
+          const old = { manha: "0,1", plantao: "3,2,4" };
+          c.anchors = c.anchors.filter(a => !(a.date === "2026-11-02" && old[a.group] === a.order.join(",")));
+          c.fix1 = true;
+        }
+        if (!saved.fix2) {
+          c.regimes.forEach(r => { if (r.name === "Escala reduzida") r.name = "Nova escala — conforme legislação vigente"; });
+          c.fix2 = true;
+        }
+        return c;
+      }
+    } catch (e) {}
     return clone(DEFAULT_CONFIG);
   }
   let cfg = loadConfig();
@@ -390,7 +406,7 @@
         ${lines.map(l => `<div class="slot-line"><span>${l[0]}</span><b>${esc(l[1])}</b></div>`).join("")}</div></div>`;
     }).join("");
     const offCard = cur.off.length ? `<div class="slot-card"><div class="slot-top c2">Folga no fim de semana</div><div class="slot-body">
-      ${cur.off.map(x => `<div class="slot-name" style="margin-bottom:4px">${esc(pname(x.person))}</div><div class="slot-line" style="margin-bottom:10px"><span>Próxima semana</span><b>${esc(nextRole(x.person))}</b></div>`).join("")}
+      ${cur.off.map(x => `<div class="slot-name" style="margin-bottom:6px">${esc(pname(x.person))}</div>`).join("")}
       </div></div>` : "";
     const outside = cfg.people.map((_, i) => i).filter(i => !cur.items.some(x => x.person === i));
     const hol = [cur.satH && `sábado ${dm(cur.sat)} é feriado (${esc(cur.satH.name)})`, cur.sunH && `domingo ${dm(cur.sun)} é feriado (${esc(cur.sunH.name)})`].filter(Boolean);
