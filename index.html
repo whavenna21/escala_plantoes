@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Escala de Plantões — NOC</title>
+<title>Escala de Plantões</title>
 <style>
   :root {
     --navy: #24476a; --navy2: #376da0;
@@ -133,6 +133,33 @@
   .emp-row .links { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 0; }
   .emp-btns { display: flex; gap: 6px; }
   @media (max-width: 860px) { .emp-row { grid-template-columns: 1fr; } }
+  .users .list li { flex-wrap: wrap; }
+  .wk-body.solo { grid-template-columns: 1fr; } .wk-body.solo .wk-on { display: none; } .wk-body.solo .wk-days { border-right: 0; }
+  #configPanel.rules-on .rot-only { display: none !important; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+  .rule-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+  .cov-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: .85rem; }
+  .cov-row select { flex: 1; }
+  textarea { width: 100%; border: 1px solid #ccd6e2; border-radius: 9px; padding: 9px 10px; font: inherit; color: var(--ink); resize: vertical; }
+  .rules table.tpl select { width: auto; min-width: 130px; }
+  .rules table.tpl td.nm input { padding: 5px 8px; font-weight: 700; }
+  .rules h4 { margin: 18px 0 6px; font-size: .95rem; }
+  td.bad { box-shadow: inset 0 0 0 2px #d0021b; }
+  .okbox { padding: 11px 14px; background: #e3f2e7; border: 1px solid #b9dcc4; color: #286641; border-radius: 12px; font-size: .86rem; }
+  ul.issues { margin: 6px 0 0; padding-left: 18px; max-height: 220px; overflow: auto; }
+  .hr-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .hr-tools select { width: auto; max-width: 320px; padding: 6px 8px; font-size: .82rem; }
+  table.hr { user-select: none; }
+  td.sel { outline: 3px solid #1f6feb; outline-offset: -3px; filter: brightness(.93); }
+  td.rowsel, th.colsel { cursor: pointer; }
+  td.rowsel:hover, th.colsel:hover { text-decoration: underline; }
+  #tab-sobre .panel h2 { font-size: 1.05rem; }
+  .sbtot td { font-weight: 800; background: #f8fafc; }
+  table.sbacs td.desc { min-width: 260px; white-space: normal; font-weight: 400; position: static; }
+  table.hrsum tr.sbwe td { background: #fffaf0; }
+  table.sbhours input { width: 190px; padding: 5px 8px; font-size: .82rem; }
+  details.panel > summary { cursor: pointer; }
   .group-edit { border: 1px dashed #c9d4e1; border-radius: 10px; padding: 10px; margin-top: 12px; background: #fff; }
   .flag { font-size: .68rem; color: #a26b00; font-weight: 800; }
 
@@ -195,7 +222,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>Escala de Plantões — NOC</h1>
+      <h1 id="pageTitle">Escala de Plantões</h1>
       <p>Rodízio semanal • sábado, domingo e sobreaviso</p>
       <span class="sync local" id="syncState">Modo local — salvo só neste navegador</span>
     </div>
@@ -204,15 +231,16 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="painel">Painel</button>
-    <button class="tab" data-tab="calendario">Calendário</button>
+    <button class="tab" data-tab="calendario" id="tabCalBtn">Calendário</button>
     <button class="tab hidden" data-tab="rh" id="tabRhBtn">Escala RH</button>
+    <button class="tab hidden" data-tab="sobre" id="tabSbBtn">Sobreaviso</button>
     <button class="tab hidden" data-tab="config" id="tabConfigBtn">Configurar escala</button>
   </nav>
 
   <!-- PAINEL -->
   <section id="tab-painel">
     <div class="panel" id="nowPanel"></div>
-    <div class="panel">
+    <div class="panel" id="forecastPanel">
       <div class="row-between">
         <div>
           <h2>Previsão anual</h2>
@@ -254,7 +282,7 @@
     <div class="panel">
       <div class="row-between">
         <div>
-          <h2>Escala RH — setor todo</h2>
+          <h2>Escala RH — <span class="sectorName"></span></h2>
           <p class="lead" style="margin:0">Preenchida automaticamente a partir da escala de plantões, feriados e férias. Copie e cole no controle do RH.</p>
         </div>
         <div class="cal-nav">
@@ -268,6 +296,19 @@
     </div>
   </section>
 
+  <section id="tab-sobre" class="hidden">
+    <div class="row-between" style="margin-bottom:12px">
+      <div><h2 style="margin:0">Sobreaviso e acionamentos — <span class="sectorName"></span></h2></div>
+      <div class="cal-nav">
+        <div class="yearbtns" data-years></div>
+        <button class="secondary small" id="sbPrev">◀</button>
+        <select id="sbMonth"></select>
+        <button class="secondary small" id="sbNext">▶</button>
+      </div>
+    </div>
+    <div id="sbPanel"></div>
+  </section>
+
   <section id="tab-config" class="hidden">
     <div class="panel" id="configPanel"></div>
   </section>
@@ -275,12 +316,14 @@
 
 <div class="modal-bg hidden" id="loginModal">
   <div class="modal" id="loginForm">
-    <h2>Entrar</h2>
+    <h2 id="lgTitle">Entrar</h2>
+    <p class="note hidden" id="lgFirst" style="margin:-8px 0 14px">Primeiro acesso neste computador: crie o usuário administrador. Depois ele pode cadastrar outros usuários em “Configurar escala”.</p>
     <div class="field"><label for="lgUser">Usuário</label><input id="lgUser" autocomplete="username" required></div>
     <div class="field"><label for="lgPass">Senha</label>
       <div class="pwd"><input id="lgPass" type="password" autocomplete="current-password"><button type="button" class="eye" id="lgEye" title="Mostrar senha" aria-label="Mostrar senha">👁</button></div>
       <label class="check" style="margin-top:8px"><input type="checkbox" id="lgShow"> Mostrar senha</label>
     </div>
+    <div class="field hidden" id="lgPass2Box"><label for="lgPass2">Confirme a senha</label><input id="lgPass2" type="password" autocomplete="new-password"></div>
     <div class="err" id="lgErr"></div>
     <div class="actions" style="margin-top:0">
       <button type="button" class="primary" id="lgSubmit">Entrar</button>
@@ -309,26 +352,41 @@
   };
   // E-mail usado no Firebase Authentication para cada usuário (o login aceita só o nome).
   const USER_EMAILS = {
-    wanessa: "wanessa@evaconnect.com.br",
-    maycon: "maycon@evaconnect.com.br"
+    wanessa: "wanessa@texnet.com.br",
+    maycon: "maycon@texnet.com.br"
   };
+  // Administradoras principais (podem criar e remover usuários). Precisa ser igual ao e-mail no Authentication.
+  const MASTERS = ["wanessa@texnet.com.br", "maycon@texnet.com.br"];
   const FB_VERSION = "10.12.2";
   const FB_ON = !!FIREBASE_CONFIG.apiKey;
+  // ================= SERVIDOR (PHP) =================
+  // Endereço do arquivo api.php, que guarda a escala em CSV (banco_escala.csv e banco_usuarios.csv)
+  // na mesma pasta do index.html (ex.: /var/www/html/PHP/relacionamento/). Vazio = salva só no navegador.
+  const SERVER_API = "";
+  const SRV_ON = !FB_ON && !!SERVER_API;
   let userEmail = "";
+  let perm = { master: false, edit: false, rh: false };
+  const access = { list: [], loaded: false };
+  let usersUnsub = null;
+  const emailFor = u => u.includes("@") ? u : (USER_EMAILS[u] || `${u}@${FIREBASE_CONFIG.authDomain}`);
   let fb = null;          // { auth, db, ref, setDoc, signIn, signOut, serverTimestamp }
   let lastSynced = "";    // última versão vinda/enviada ao Firestore
   let lastSyncedRh = "", rhLoaded = false, rhUnsub = null;
   // ============================================
 
-  const USERS = {
-    wanessa: "5b2f50d159cbf46f94c77ffd45bbff7fae5910977838ffe53be816f6ed11aebd",
-    maycon:  "a6d874c84c2b701ea5f78994e66da43263f8fb6d2dc1df9ec0dcbd09a6992731"
-  };
+  // ---------- Usuários no modo local (sem Firebase) ----------
+  // Ficam guardados só neste navegador. O primeiro usuário criado é o administrador.
+  const LOCAL_USERS_KEY = STORE_KEY + ".usuarios";
+  function loadLocalUsers() { try { return JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || "[]"); } catch (e) { return []; } }
+  function saveLocalUsers(list) { try { localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(list)); } catch (e) {} }
+  let localUsers = FB_ON || SRV_ON ? [] : loadLocalUsers();
+  const localPerm = u => { const x = localUsers.find(y => y.user === u); return x ? { master: !!x.master, edit: true, rh: !!x.master || !!x.rh } : { master: false, edit: false, rh: false }; };
 
   // ---------- Configuração padrão ----------
   // Cada escala tem "grupos de rodízio". Dentro de um grupo, quem está na posição 1 vai para a 2
   // na semana seguinte, da 2 para a 3 ... e da última volta para a 1.
   const DEFAULT_CONFIG = {
+    sector: "NOC",
     people: ["Wanessa", "Jorge/Marcos", "Gabriel", "Felipe", "Heitor"],
     regimes: [
       { name: "Escala atual", start: "2026-01-01", groups: [
@@ -392,9 +450,9 @@
     }
     if (!saved.fix3) {
       // Dezembro: plantão da T.I alternando semanalmente entre Wanessa e Marcos
-      if (!c.people.some(p => p.trim().toLowerCase() === "marcos")) c.people.push("Marcos");
       const dec = c.regimes.find(r => r.start === "2026-12-01");
-      if (dec && !dec.groups.some(g => g.id === "ti")) {
+      if (dec && !dec.groups.some(g => g.id === "ti") && c.people.some(p => p.toLowerCase().includes("wanessa"))) {
+        if (!c.people.some(p => p.trim().toLowerCase() === "marcos")) c.people.push("Marcos");
         dec.groups.push({ id: "ti", name: "Plantão da T.I", slots: [
           { name: "Plantão T.I", sat: "", sun: "", oncall: false, ti: true },
           { name: "Folga", sat: "", sun: "", oncall: false }
@@ -406,6 +464,11 @@
       c.fix3 = true;
     }
     if (!c.hr) c.hr = defaultHR(c.people);
+    if (!c.rules) c.rules = defaultRules();
+    c.rules.plantao = Object.assign({ start: "", first: "", satCode: "", sunCode: "", holCode: "", holWho: "other" }, c.rules.plantao || {});
+    c.rules.periods = c.rules.periods.map(p => Object.assign(defaultRulePeriod(), p));
+    if (!c.hr.hoFormat) c.hr.hoFormat = "prefix";
+    c.ui = Object.assign({ calendar: true, forecast: true, offCard: true, nextWeek: true, nextRole: true, notices: true }, c.ui || {});
     return c;
   }
   function loadConfig() {
@@ -415,31 +478,96 @@
   let cfg = loadConfig();
   let pushTimer = null;
   function saveConfig(msg, quiet) {
+    cfgVersion++;
     try { localStorage.setItem(STORE_KEY, JSON.stringify(cfg)); } catch (e) {}
     if (FB_ON) { clearTimeout(pushTimer); setSync("saving"); pushTimer = setTimeout(pushRemote, 700); }
-    yearButtons(); renderNow(); renderYear(); renderCalendar(); if (!quiet) renderHR();
+    if (SRV_ON && perm.edit) { clearTimeout(srv.pushT); setSync("saving"); srv.pushT = setTimeout(pushServer, 700); }
+    renderUI(); renderSector(); yearButtons(); renderNow(); renderYear(); renderCalendar(); if (!quiet) { renderHR(); renderSB(); }
     if (msg !== false) toast(msg || "Alterações salvas");
   }
 
   let user = null;
-  if (!FB_ON) { try { user = sessionStorage.getItem(SESSION_KEY); } catch (e) {} }
+  if (!FB_ON && !SRV_ON) {
+    try { user = sessionStorage.getItem(SESSION_KEY); } catch (e) {}
+    if (user) { perm = localPerm(user); if (!perm.edit) user = null; }
+  }
 
   // ---------- Sincronização com o Firebase ----------
   function setSync(st, extra) {
     const el = $("syncState"); if (!el) return;
-    const map = { local: ["Modo local — salvo só neste navegador", "local"], loading: ["Carregando escala…", "wait"], ok: ["Escala sincronizada", "ok"],
+    const map = { srv: ["Escala salva no servidor", "ok"], srvEmpty: ["Servidor conectado — escala ainda não salva", "wait"], local: ["Modo local — salvo só neste navegador", "local"], loading: ["Carregando escala…", "wait"], ok: ["Escala sincronizada", "ok"],
       saving: ["Salvando…", "wait"], error: ["Erro de conexão" + (extra ? ": " + extra : ""), "err"] };
     const [t, c] = map[st] || map.local;
     el.textContent = t; el.className = "sync " + c;
   }
+  // ---------- Servidor PHP ----------
+  const srv = { first: false, versao: 0, users: [], pushT: null, lastSent: "" };
+  async function api(acao, body) {
+    const opts = body ? { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) }
+                      : { credentials: "same-origin", cache: "no-store" };
+    let r;
+    try { r = await fetch(SERVER_API + "?acao=" + acao, opts); } catch (e) { throw new Error("sem conexão com o servidor"); }
+    let j = {};
+    try { j = await r.json(); } catch (e) { throw new Error("o servidor não respondeu como esperado (o PHP está ativo nessa pasta?)"); }
+    if (!r.ok) throw new Error(j.erro || "erro " + r.status);
+    return j;
+  }
+  function applySession(s) {
+    user = s ? s.user : null;
+    perm = s ? { master: !!s.master, edit: true, rh: !!s.rh } : { master: false, edit: false, rh: false };
+  }
+  async function loadSrvUsers() { try { srv.users = (await api("usuarios")).lista || []; } catch (e) { srv.users = []; } }
+  async function initServer() {
+    setSync("loading");
+    try {
+      const j = await api("dados");
+      srv.first = !!j.primeiroAcesso; srv.versao = j.versao || 0;
+      if (j.config) {
+        cfg = migrate(JSON.parse(j.config)); srv.lastSent = j.config; cfgVersion++;
+        try { localStorage.setItem(STORE_KEY, j.config); } catch (e) {}
+      }
+      applySession(j.sessao);
+      if (perm.master) await loadSrvUsers();
+      setSync(j.config ? "srv" : "srvEmpty");
+      renderUser(); renderViews(); renderConfig();
+      setInterval(pollServer, 30000);
+    } catch (e) { setSync("error", e.message); }
+  }
+  async function pollServer() {
+    if (document.hidden || srv.pushT) return;
+    try {
+      const v = await api("versao");
+      if (!v.versao || v.versao === srv.versao) return;
+      const d = await api("dados");
+      srv.versao = d.versao;
+      if (!d.config || d.config === srv.lastSent) return;
+      cfg = migrate(JSON.parse(d.config)); srv.lastSent = d.config; cfgVersion++;
+      try { localStorage.setItem(STORE_KEY, d.config); } catch (e) {}
+      renderViews();
+      if (!(document.activeElement && $("configPanel").contains(document.activeElement))) renderConfig();
+      setSync("srv");
+      toast(`Escala atualizada por ${d.atualizadoPor || "outro usuário"}`);
+    } catch (e) {}
+  }
+  async function pushServer() {
+    srv.pushT = null;
+    if (!perm.edit) return;
+    const data = JSON.stringify(cfg);
+    if (data === srv.lastSent) { setSync("srv"); return; }
+    try { const j = await api("salvar", { config: data }); srv.lastSent = data; srv.versao = j.versao; setSync("srv"); }
+    catch (e) {
+      setSync("error", e.message); toast("Não foi possível salvar no servidor: " + e.message);
+      if (/login/i.test(e.message)) { applySession(null); renderUser(); renderConfig(); }
+    }
+  }
   async function pushRemote() {
-    if (!fb || !user) return;
+    if (!fb || !perm.edit) return;
     const { hr, ...rest } = cfg;
     const data = JSON.stringify(rest), rhData = JSON.stringify(hr);
     try {
       const jobs = [];
       if (data !== lastSynced) { lastSynced = data; jobs.push(fb.setDoc(fb.ref, { data, updatedBy: user, updatedAt: fb.serverTimestamp() })); }
-      if (rhLoaded && rhData !== lastSyncedRh) { lastSyncedRh = rhData; jobs.push(fb.setDoc(fb.rhRef, { data: rhData, updatedBy: user, updatedAt: fb.serverTimestamp() })); }
+      if (perm.rh && rhLoaded && rhData !== lastSyncedRh) { lastSyncedRh = rhData; jobs.push(fb.setDoc(fb.rhRef, { data: rhData, updatedBy: user, updatedAt: fb.serverTimestamp() })); }
       await Promise.all(jobs);
       setSync("ok");
     } catch (e) {
@@ -458,12 +586,20 @@
       const app = appM.initializeApp(FIREBASE_CONFIG);
       const auth = authM.getAuth(app), db = fsM.getFirestore(app);
       fb = { auth, db, ref: fsM.doc(db, "escala", "config"), rhRef: fsM.doc(db, "escala", "rh"), setDoc: fsM.setDoc, serverTimestamp: fsM.serverTimestamp,
-        signIn: (e, p) => authM.signInWithEmailAndPassword(auth, e, p), signOut: () => authM.signOut(auth) };
-      authM.onAuthStateChanged(auth, u => {
-        userEmail = u ? u.email : "";
-        user = u ? (Object.keys(USER_EMAILS).find(k => USER_EMAILS[k] === u.email) || u.email.split("@")[0]) : null;
-        if (rhUnsub) { rhUnsub(); rhUnsub = null; rhLoaded = false; }
-        if (u) rhUnsub = fsM.onSnapshot(fb.rhRef, snap => {
+        signIn: (e, p) => authM.signInWithEmailAndPassword(auth, e, p), signOut: () => authM.signOut(auth),
+        usersRef: fsM.doc(db, "escala", "usuarios"),
+        // Cria a conta numa instância separada, para não desconectar quem está logado
+        createUser: async (email, pass) => {
+          const sec = appM.getApps().find(a => a.name === "cadastro") || appM.initializeApp(FIREBASE_CONFIG, "cadastro");
+          const sa = authM.getAuth(sec);
+          await authM.createUserWithEmailAndPassword(sa, email, pass);
+          await authM.signOut(sa);
+        },
+        saveUsers: list => fsM.setDoc(fsM.doc(db, "escala", "usuarios"), { list, emails: list.map(x => x.email), rhEmails: list.filter(x => x.rh).map(x => x.email), updatedBy: user, updatedAt: fsM.serverTimestamp() }),
+        updatePassword: p => authM.updatePassword(auth.currentUser, p) };
+      const startRh = () => {
+        if (rhUnsub) return;
+        rhUnsub = fsM.onSnapshot(fb.rhRef, snap => {
           rhLoaded = true;
           if (!snap.exists()) return;
           const { data } = snap.data();
@@ -472,6 +608,28 @@
           try { cfg.hr = JSON.parse(data); } catch (e) { return; }
           if (!(document.activeElement && $("hrPanel").contains(document.activeElement) && document.activeElement.tagName === "INPUT")) renderHR();
         }, e => setSync("error", e.code || e.message));
+      };
+      const stopRh = () => { if (rhUnsub) { rhUnsub(); rhUnsub = null; } rhLoaded = false; };
+      authM.onAuthStateChanged(auth, u => {
+        userEmail = u ? u.email.toLowerCase() : "";
+        user = u ? userEmail.split("@")[0] : null;
+        stopRh();
+        if (usersUnsub) { usersUnsub(); usersUnsub = null; }
+        access.list = []; access.loaded = false;
+        const master = !!u && MASTERS.includes(userEmail);
+        perm = { master, edit: master, rh: master };
+        if (master) startRh();
+        if (u) usersUnsub = fsM.onSnapshot(fb.usersRef, snap => {
+          access.list = snap.exists() ? (snap.data().list || []) : [];
+          access.loaded = true;
+          if (!master) {
+            const me = access.list.find(x => x.email === userEmail);
+            if (!me) { toast("Este usuário não tem permissão de acesso"); fb.signOut(); return; }
+            perm = { master: false, edit: true, rh: !!me.rh };
+            if (perm.rh) startRh(); else stopRh();
+          }
+          renderUser(); renderConfig(); renderHR();
+        }, () => { if (!master) { toast("Este usuário não tem permissão de acesso"); fb.signOut(); } });
         renderUser(); renderViews(); renderConfig();
       });
       fsM.onSnapshot(fb.ref, snap => {
@@ -538,6 +696,7 @@
   const awayIn = monday => vacationsInWeek(monday).map(v => v.person);
   // Monta a semana: lista de atribuições {slot, person, group}
   function week(monday) {
+    if (rulesOn()) return ruleWeek(monday);
     const sat = addDays(monday, 5), sun = addDays(monday, 6);
     const reg = regimeFor(sat);
     const key = iso(monday);
@@ -596,22 +755,23 @@
     const nxt = week(addDays(cur.monday, 7));
     const nextRole = p => { const it = nxt.items.find(x => x.person === p); return it ? it.slot.name : nxt.onVac.includes(p) ? "Férias" : "Fora da escala"; };
     const working = cur.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall || x.slot.ti)
-      .sort((a, b) => (a.slot.oncall - b.slot.oncall) || (a.slot.sat || "~").localeCompare(b.slot.sat || "~", "pt-BR", { numeric: true }));
+      .sort((a, b) => (a.slot.oncall - b.slot.oncall) || (!!b.slot.sat - !!a.slot.sat) || (a.slot.sat || "~").localeCompare(b.slot.sat || "~", "pt-BR", { numeric: true }));
     const dayVal = (h, v) => h ? `Feriado (${esc(h.name)})` : esc(v || "—");
     const cards = working.map(x => {
       const sl = x.slot;
-      const lines = sl.ti ? [["Fim de semana", "Plantão da T.I (sem carga horária)"], ["Próxima semana", nextRole(x.person)]] : [
+      const lines = sl.ti ? [["Fim de semana", "Plantão da T.I (sem carga horária)"], ...(cfg.ui.nextRole ? [["Próxima semana", nextRole(x.person)]] : [])] : [
         ["Sábado " + dm(cur.sat), cur.satH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sat || "—")],
         ["Domingo " + dm(cur.sun), cur.sunH ? (sl.oncall ? "Feriado — plantão o dia todo" : "Feriado") : (sl.sun || "—")],
         ...(sl.after && !cur.satH ? [["Sábado após o expediente", sl.after]] : []),
-        ["Sobreaviso na semana", sl.oncall ? "Sim" : "Não"],
+        ...(rulesOn() ? [] : [["Sobreaviso na semana", sl.oncall ? "Sim" : "Não"]]),
         ["Próxima semana", nextRole(x.person)]
-      ];
+      ].filter(l => cfg.ui.nextRole || l[0] !== "Próxima semana");
+      if (rulesOn() && sl.oncall) lines.splice(0, lines.length, ...[["Sábado " + dm(cur.sat), cur.satH ? "Feriado — plantão o dia todo" : "Plantão / sobreaviso"], ["Domingo " + dm(cur.sun), cur.sunH ? "Feriado — plantão o dia todo" : "Plantão / sobreaviso"]]);
       return `<div class="slot-card"><div class="slot-top ${slotCls(sl)}">${esc(sl.name)}</div>
         <div class="slot-body"><div class="slot-name">${esc(pname(x.person))}</div>
         ${lines.map(l => `<div class="slot-line"><span>${l[0]}</span><b>${esc(l[1])}</b></div>`).join("")}</div></div>`;
     }).join("");
-    const offCard = cur.off.length ? `<div class="slot-card"><div class="slot-top c2">Folga no fim de semana</div><div class="slot-body">
+    const offCard = cur.off.length && cfg.ui.offCard ? `<div class="slot-card"><div class="slot-top c2">Folga no fim de semana</div><div class="slot-body">
       ${cur.off.map(x => `<div class="slot-name" style="margin-bottom:6px">${esc(pname(x.person))}</div>`).join("")}
       </div></div>` : "";
     const outside = cfg.people.map((_, i) => i).filter(i => !cur.items.some(x => x.person === i) && !cur.onVac.includes(i));
@@ -627,17 +787,25 @@
     $("nowPanel").innerHTML = `
       <div class="now-head">
         <div><h2>Semana vigente</h2><p class="lead" style="margin:0">${dShort(cur.monday)} a ${dShort(cur.sun)} • ${esc(cur.reg.name)}${cur.overridden ? " • <b>com troca manual</b>" : ""}</p></div>
-        <span class="badge">Sobreaviso: ${esc(oncallNames(cur))}</span>
+        ${cur.oncall.length ? `<span class="badge">Sobreaviso: ${esc(oncallNames(cur))}</span>` : ""}
       </div>
       <div class="now-grid">${cards}${offCard}</div>
-      ${outside.length ? `<p class="note" style="margin:10px 0 0">Fora da escala nesta semana: ${outside.map(i => esc(pname(i))).join(", ")}</p>` : ""}
-      <div class="next"><b>Próxima semana (${dShort(nxt.sat)} e ${dShort(nxt.sun)}):</b>
+      ${outside.length && cfg.ui.notices && !rulesOn() ? `<p class="note" style="margin:10px 0 0">Fora da escala nesta semana: ${outside.map(i => esc(pname(i))).join(", ")}</p>` : ""}
+      ${cfg.ui.nextWeek ? `<div class="next"><b>Próxima semana (${dShort(nxt.sat)} e ${dShort(nxt.sun)}):</b>
         ${nxt.items.filter(x => x.slot.sat || x.slot.sun || x.slot.oncall || x.slot.ti).map(x => `<span class="pill ${slotCls(x.slot)}">${esc(x.slot.name)}: ${esc(pname(x.person))}</span>`).join("")}
-      </div>${notice}`;
+      </div>` : ""}${cfg.ui.notices ? notice : ""}`;
   }
 
   // ---------- Legendas ----------
   function legendHTML(year) {
+    if (rulesOn()) {
+      const ps = []; weeksOfYear(year).forEach(w => { const P = rulePeriodFor(w.sun); if (!ps.includes(P)) ps.push(P); });
+      const plant = cfg.hr.employees.some(e => e.plantao);
+      return ps.map(P => `<div class="legend"><span class="lname">${esc(P.name)} (desde ${parse(P.start).toLocaleDateString("pt-BR")}):</span>
+        ${[["satCoverage", "Sábado"], ["sunCoverage", "Domingo"]].flatMap(([k, n]) => P[k].filter(c => +c.count > 0).map(c => `<span class="pill c0">${n} • ${esc(codeTime(codeById(c.code)) || "—")} • ${c.count} pessoa(s)</span>`)).join("")}
+        ${plant ? `<span class="pill c1">Plantonista do fim de semana • sobreaviso</span>` : ""}</div>`).join("")
+        + `<div class="legend"><span class="pill chol">Feriado</span></div>`;
+    }
     const used = [];
     weeksOfYear(year).forEach(w => { if (!used.includes(w.reg)) used.push(w.reg); });
     return used.map(r => `<div class="legend"><span class="lname">${esc(r.name)} (desde ${parse(r.start).toLocaleDateString("pt-BR")}):</span>
@@ -668,8 +836,8 @@
     $("months").innerHTML = Object.keys(byMonth).map(m => `
       <div class="month"><h3>${monthName(state.year, +m)}</h3>
         ${byMonth[m].map(w => `<div class="wk ${w.key === curKey ? "current" : ""} ${canEdit ? "clickable" : ""}" data-week="${w.key}" title="${canEdit ? "Clique para editar esta semana" : ""}">
-          <div class="wk-title">Escala de finais de semana${w.overridden ? ' <span class="flag">• TROCA</span>' : ""}${w.onVac.length ? ` <span class="flag vacflag">• FÉRIAS: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</div>
-          <div class="wk-body">
+          <div class="wk-title">Escala de finais de semana - ${esc(sectorName())}${w.overridden ? ' <span class="flag">• TROCA</span>' : ""}${w.onVac.length ? ` <span class="flag vacflag">• FÉRIAS: ${w.onVac.map(i => esc(pname(i))).join(", ")}</span>` : ""}</div>
+          <div class="wk-body ${w.oncall.length || w.items.some(x => x.slot.ti) ? "" : "solo"}">
             <div class="wk-days">${dayBlock(w.sat, w.satH, w.satWork, "sat", w)}${dayBlock(w.sun, w.sunH, w.sunWork, "sun", w)}</div>
             <div class="wk-on"><div class="on-h">SOBREAVISO</div><div class="on-n">${esc(oncallNames(w))}</div>${w.items.filter(x => x.slot.ti).map(x => `<div class="on-ti">Plantão T.I<br><b>${esc(pname(x.person))}</b></div>`).join("")}</div>
           </div>
@@ -736,23 +904,204 @@
     });
   }
 
+  function renderLocalUsersSection() {
+    const mine = `<div class="sect" style="border:0;margin-top:0;padding-top:0">
+        <h3>Minha senha</h3>
+        <div class="grid4">
+          <div><label>Nova senha</label><div class="pwd"><input type="password" id="myPass" autocomplete="new-password"><button type="button" class="eye" data-eye="myPass">👁</button></div></div>
+          <div style="display:flex;align-items:flex-end"><button class="secondary small" id="myPassBtn">Alterar minha senha</button></div>
+        </div>
+      </div>`;
+    if (!perm.master) return mine;
+    const fmt = t => t ? new Date(t).toLocaleDateString("pt-BR") : "";
+    return `<div class="sect users" style="border:0;margin-top:0;padding-top:0">
+        <h3>Usuários com acesso</h3>
+        <p class="lead note">Os usuários ficam salvos só neste computador e navegador. <b>Administrador</b> pode criar e remover usuários; <b>Escala RH</b> libera essa aba.</p>
+        <ul class="list">${localUsers.map((x, i) => `<li>
+          <span><b>${esc(x.user)}</b>${x.user === user ? " (você)" : ""} <span class="note">— criado${x.createdBy ? " por " + esc(x.createdBy) : ""}${x.createdAt ? " em " + fmt(x.createdAt) : ""}</span></span>
+          <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <label class="check" style="margin:0"><input type="checkbox" data-lumaster="${i}" ${x.master ? "checked" : ""} ${x.user === user ? "disabled" : ""}> Administrador</label>
+            <label class="check" style="margin:0"><input type="checkbox" data-lurh="${i}" ${x.master || x.rh ? "checked" : ""} ${x.master ? "disabled" : ""}> Escala RH</label>
+            ${x.user !== user ? `<button class="secondary small" data-lureset="${i}">Nova senha</button><button class="danger small" data-ludel="${i}">Remover</button>` : ""}
+          </span></li>`).join("")}</ul>
+        <div class="grid4" style="margin-top:12px">
+          <div><label>Novo usuário</label><input id="nuUser" placeholder="ex.: joao" autocomplete="off"></div>
+          <div><label>Senha (mín. 6 caracteres)</label><div class="pwd"><input type="password" id="nuPass" autocomplete="new-password"><button type="button" class="eye" data-eye="nuPass">👁</button></div></div>
+          <div><label class="check"><input type="checkbox" id="nuRh"> Acesso à Escala RH</label><label class="check" style="margin-top:6px"><input type="checkbox" id="nuMaster"> Administrador</label></div>
+          <div style="display:flex;align-items:flex-end"><button class="primary small" id="nuAdd">Criar usuário</button></div>
+        </div>
+      </div>
+      ${mine.replace('style="border:0;margin-top:0;padding-top:0"', "")}`;
+  }
+  function renderSrvUsersSection() {
+    let h = renderLocalUsersSection();
+    if (!perm.master) return h;
+    const fmt = t => t ? new Date(t).toLocaleDateString("pt-BR") : "";
+    const list = `<ul class="list">${srv.users.map(x => `<li>
+          <span><b>${esc(x.user)}</b>${x.user === user ? " (você)" : ""} <span class="note">— criado${x.criadoPor ? " por " + esc(x.criadoPor) : ""}${x.criadoEm ? " em " + fmt(x.criadoEm) : ""}</span></span>
+          <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <label class="check" style="margin:0"><input type="checkbox" data-sumaster="${esc(x.user)}" ${x.master ? "checked" : ""} ${x.user === user ? "disabled" : ""}> Administrador</label>
+            <label class="check" style="margin:0"><input type="checkbox" data-surh="${esc(x.user)}" ${x.master || x.rh ? "checked" : ""} ${x.master ? "disabled" : ""}> Escala RH</label>
+            ${x.user !== user ? `<button class="secondary small" data-sureset="${esc(x.user)}">Nova senha</button><button class="danger small" data-sudel="${esc(x.user)}">Remover</button>` : ""}
+          </span></li>`).join("")}</ul>`;
+    return h.replace(/<ul class="list">[\s\S]*?<\/ul>/, list).replace("Os usuários ficam salvos só neste computador e navegador.", "Os usuários ficam salvos no servidor e valem para qualquer computador da rede.");
+  }
+  async function onSrvUsersClick(t) {
+    if (t.dataset.eye) { const i = $(t.dataset.eye); i.type = i.type === "password" ? "text" : "password"; t.classList.toggle("on", i.type === "text"); return true; }
+    const done = (msg, j) => { if (j && j.lista) srv.users = j.lista; renderConfig(); toast(msg); };
+    try {
+      if (t.id === "myPassBtn") { await api("senha", { pass: $("myPass").value }); $("myPass").value = ""; toast("Senha alterada"); return true; }
+      if (t.id === "nuAdd") {
+        const u = $("nuUser").value.trim().toLowerCase();
+        done(`Usuário ${u} criado`, await api("criar", { user: u, pass: $("nuPass").value, rh: $("nuRh").checked, master: $("nuMaster").checked })); return true;
+      }
+      if (t.dataset.sureset) {
+        const p = prompt(`Nova senha para ${t.dataset.sureset} (mín. 6 caracteres):`); if (p === null) return true;
+        await api("redefinir", { user: t.dataset.sureset, pass: p }); toast(`Senha de ${t.dataset.sureset} alterada`); return true;
+      }
+      if (t.dataset.sudel) {
+        if (!confirm(`Remover o usuário ${t.dataset.sudel}?`)) return true;
+        done(`Usuário ${t.dataset.sudel} removido`, await api("remover", { user: t.dataset.sudel })); return true;
+      }
+    } catch (e) { toast(e.message); return true; }
+    return false;
+  }
+  function onLocalUsersClick(t) {
+    if (t.dataset.eye) { const i = $(t.dataset.eye); i.type = i.type === "password" ? "text" : "password"; t.classList.toggle("on", i.type === "text"); return true; }
+    const save = msg => { saveLocalUsers(localUsers); perm = localPerm(user); renderUser(); renderConfig(); renderHR(); toast(msg); };
+    if (t.id === "myPassBtn") {
+      const p = $("myPass").value;
+      if (p.length < 6) { toast("A senha precisa ter pelo menos 6 caracteres"); return true; }
+      localUsers.find(x => x.user === user).hash = sha256(user + ":" + p); save("Senha alterada"); return true;
+    }
+    if (t.id === "nuAdd") {
+      const u = $("nuUser").value.trim().toLowerCase(), p = $("nuPass").value;
+      if (!/^[a-z0-9._-]{3,30}$/.test(u)) { toast("Usuário: 3 a 30 letras minúsculas, números, ponto, hífen ou _ (sem espaço e sem acento)"); return true; }
+      if (localUsers.some(x => x.user === u)) { toast("Esse usuário já existe"); return true; }
+      if (p.length < 6) { toast("A senha precisa ter pelo menos 6 caracteres"); return true; }
+      localUsers.push({ user: u, hash: sha256(u + ":" + p), master: $("nuMaster").checked, rh: $("nuRh").checked, createdBy: user, createdAt: Date.now() });
+      save(`Usuário ${u} criado`); return true;
+    }
+    if (t.dataset.lureset !== undefined) {
+      const x = localUsers[+t.dataset.lureset];
+      const p = prompt(`Nova senha para ${x.user} (mín. 6 caracteres):`);
+      if (p === null) return true;
+      if (p.length < 6) { toast("A senha precisa ter pelo menos 6 caracteres"); return true; }
+      x.hash = sha256(x.user + ":" + p); save(`Senha de ${x.user} alterada`); return true;
+    }
+    if (t.dataset.ludel !== undefined) {
+      const x = localUsers[+t.dataset.ludel];
+      if (!confirm(`Remover o usuário ${x.user}?`)) return true;
+      localUsers.splice(+t.dataset.ludel, 1); save(`Usuário ${x.user} removido`); return true;
+    }
+    return false;
+  }
+  function renderUsersSection() {
+    if (SRV_ON) return renderSrvUsersSection();
+    if (!FB_ON) return renderLocalUsersSection();
+    const fmt = t => t ? new Date(t).toLocaleDateString("pt-BR") : "";
+    const mine = `<div class="sect" style="border:0;margin-top:0;padding-top:0">
+        <h3>Minha senha</h3>
+        <div class="grid4">
+          <div><label>Nova senha</label><div class="pwd"><input type="password" id="myPass" autocomplete="new-password"><button type="button" class="eye" data-eye="myPass">👁</button></div></div>
+          <div style="display:flex;align-items:flex-end"><button class="secondary small" id="myPassBtn">Alterar minha senha</button></div>
+        </div>
+      </div>`;
+    if (!perm.master) return mine;
+    return `<div class="sect users" style="border:0;margin-top:0;padding-top:0">
+        <h3>Usuários com acesso</h3>
+        <p class="lead note">Fixos: ${MASTERS.map(m => `<b>${esc(m.split("@")[0])}</b>`).join(", ")} (podem criar e remover usuários). Os usuários criados aqui entram só com o nome e a senha e podem configurar a escala; marque “Escala RH” para liberar também essa aba.</p>
+        ${!access.loaded ? `<p class="note">Carregando usuários…</p>` : access.list.length ? `<ul class="list">${access.list.map((x, i) => `<li>
+          <span><b>${esc(x.user)}</b> <span class="note">— criado por ${esc(x.createdBy || "—")}${x.createdAt ? " em " + fmt(x.createdAt) : ""}</span></span>
+          <span style="display:flex;gap:12px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" data-urh="${i}" ${x.rh ? "checked" : ""}> Escala RH</label>
+          <button class="danger small" data-udel="${i}">Remover acesso</button></span></li>`).join("")}</ul>` : `<p class="note">Nenhum usuário adicional.</p>`}
+        <div class="grid4" style="margin-top:12px">
+          <div><label>Novo usuário</label><input id="nuUser" placeholder="ex.: joao" autocomplete="off"></div>
+          <div><label>Senha (mín. 6 caracteres)</label><div class="pwd"><input type="password" id="nuPass" autocomplete="new-password"><button type="button" class="eye" data-eye="nuPass">👁</button></div></div>
+          <div><label class="check"><input type="checkbox" id="nuRh"> Acesso à Escala RH</label></div>
+          <div style="display:flex;align-items:flex-end"><button class="primary small" id="nuAdd">Criar usuário</button></div>
+        </div>
+      </div>
+      ${mine.replace('style="border:0;margin-top:0;padding-top:0"', "")}`;
+  }
+  async function onUsersClick(t) {
+    if (t.dataset.eye) { const i = $(t.dataset.eye); i.type = i.type === "password" ? "text" : "password"; t.classList.toggle("on", i.type === "text"); return true; }
+    if (t.id === "myPassBtn") {
+      const p = $("myPass").value;
+      if (p.length < 6) { toast("A senha precisa ter pelo menos 6 caracteres"); return true; }
+      try { await fb.updatePassword(p); $("myPass").value = ""; toast("Senha alterada"); }
+      catch (e) { toast(/recent-login/.test(e.code || "") ? "Por segurança, saia, entre de novo e repita a troca de senha" : "Não foi possível alterar: " + (e.code || e.message)); }
+      return true;
+    }
+    if (t.id === "nuAdd") {
+      const u = $("nuUser").value.trim().toLowerCase(), p = $("nuPass").value, rh = $("nuRh").checked;
+      if (!/^[a-z0-9._-]{3,30}$/.test(u)) { toast("Usuário: 3 a 30 letras minúsculas, números, ponto, hífen ou _ (sem espaço e sem acento)"); return true; }
+      if (MASTERS.some(m => m.split("@")[0] === u) || access.list.some(x => x.user === u)) { toast("Esse usuário já tem acesso"); return true; }
+      if (p.length < 6) { toast("A senha precisa ter pelo menos 6 caracteres"); return true; }
+      const email = emailFor(u);
+      t.disabled = true; t.textContent = "Criando…";
+      let existed = false;
+      try { await fb.createUser(email, p); }
+      catch (e) {
+        const c = e.code || "";
+        if (/email-already-in-use/.test(c)) existed = true;
+        else {
+          t.disabled = false; t.textContent = "Criar usuário";
+          toast(/admin-restricted|operation-not-allowed/.test(c) ? "O Firebase bloqueou a criação: ative “Ativar criação (inscrição)” em Authentication > Configurações > Ações do usuário"
+            : /weak-password/.test(c) ? "Senha fraca: use pelo menos 6 caracteres" : "Não foi possível criar: " + (c || e.message));
+          return true;
+        }
+      }
+      try {
+        await fb.saveUsers(access.list.concat([{ user: u, email, rh, createdBy: user, createdAt: Date.now() }]));
+        toast(existed ? `Acesso devolvido a ${u} (a conta já existia, a senha antiga continua valendo)` : `Usuário ${u} criado`);
+      } catch (e) { toast("Conta criada, mas não consegui salvar a lista: " + (e.code || e.message)); }
+      return true;
+    }
+    if (t.dataset.udel !== undefined) {
+      const x = access.list[+t.dataset.udel];
+      if (!confirm(`Remover o acesso de ${x.user}?`)) return true;
+      try { await fb.saveUsers(access.list.filter((_, i) => i !== +t.dataset.udel)); toast(`Acesso de ${x.user} removido`); }
+      catch (e) { toast("Não foi possível remover: " + (e.code || e.message)); }
+      return true;
+    }
+    return false;
+  }
+
   function renderConfig() {
-    if (!user) { $("configPanel").innerHTML = ""; return; }
+    if (!perm.edit) { $("configPanel").innerHTML = ""; return; }
     const ew = week(state.editWeek ? parse(state.editWeek) : mondayOf(today));
     const anchorsSorted = [...cfg.anchors].sort((a, b) => a.date.localeCompare(b.date) || a.group.localeCompare(b.group));
     const ovKeys = Object.keys(cfg.overrides).sort();
     const hols = [...cfg.holidays].sort((a, b) => a.date.localeCompare(b.date));
+    $("configPanel").classList.toggle("rules-on", !!rulesOn());
     $("configPanel").innerHTML = `
       <h2>Configurar escala</h2>
       <p class="lead">Conectado como <b>${esc(user)}</b>${userEmail ? ` (${esc(userEmail)})` : ""}. ${FB_ON ? "As alterações são salvas automaticamente no Firebase e aparecem para toda a equipe." : "As alterações são salvas automaticamente neste navegador."}</p>
 
+      ${renderUsersSection()}
+
       <div class="sect" style="border:0;margin-top:0;padding-top:0">
+        <h3>Setor</h3>
+        <div class="grid3"><div><label>Nome do setor (aparece no título e na escala)</label><input id="sectorInput" value="${esc(cfg.sector || "")}" placeholder="ex.: NOC, SAC, Suporte"></div></div>
+      </div>
+
+      <div class="sect">
+        <h3>Recursos visíveis</h3>
+        <p class="lead note">Desmarque o que não quiser mostrar. Com tudo desmarcado, o painel mostra só os cards de quem trabalha no fim de semana e o plantonista.</p>
+        <div class="links">${[["calendar", "Aba Calendário"], ["forecast", "Previsão anual (no painel)"], ["offCard", "Card de folga (no painel)"], ["nextWeek", "Próxima semana (no painel)"], ["nextRole", "Linha “Próxima semana” dentro dos cards"], ["notices", "Avisos de feriado, férias e mudança de escala"]]
+          .map(([k, l]) => `<label class="check" style="margin:0"><input type="checkbox" data-ui="${k}" ${cfg.ui[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
+      </div>
+
+      <div class="sect">
         <h3>Colaboradores</h3>
         <div class="grid4">${cfg.people.map((p, i) => `<div><label>Colaborador ${i + 1}</label><input data-person="${i}" value="${esc(p)}"></div>`).join("")}</div>
         <div class="actions"><button class="secondary small" id="addPerson">+ Colaborador</button>${cfg.people.length > 1 ? `<button class="danger small" id="delPerson">Remover o último</button>` : ""}</div>
       </div>
 
-      <div class="sect">
+      ${renderRulesSection()}
+
+      <div class="sect rot-only">
         <h3>Trocar quem está em cada função</h3>
         <p class="lead note">Escolha a semana e defina quem fica em cada posição. “Só esta semana” é uma troca pontual; “Desta semana em diante” reinicia o rodízio a partir daqui. Dica: na previsão anual, clique em uma semana para abri-la aqui.</p>
         <div class="grid4"><div><label>Semana (qualquer dia)</label><input type="date" id="ewDate" value="${ew.key}"></div></div>
@@ -772,16 +1121,16 @@
 
       <div class="sect">
         <h3>Férias</h3>
-        <p class="lead note">Enquanto alguém do rodízio do plantão estiver de férias, os outros dois se revezam: um fica de sobreaviso (sábado ${esc(cfg.vacationSlots[0].sat || "—")} e ${esc(cfg.vacationSlots[0].after || "")}) e o outro folga, trocando a cada semana. Quando a pessoa volta, o rodízio normal continua.</p>
+        <p class="lead note rot-only">Enquanto alguém do rodízio do plantão estiver de férias, os outros dois se revezam: um fica de sobreaviso (sábado ${esc(cfg.vacationSlots[0].sat || "—")} e ${esc(cfg.vacationSlots[0].after || "")}) e o outro folga, trocando a cada semana. Quando a pessoa volta, o rodízio normal continua.</p>
         <div class="grid4">
-          <div><label>Colaborador</label><select id="vacPerson">${personOptions(2)}</select></div>
+          <div><label>Colaborador</label><select id="vacPerson"><option value="">— selecione o colaborador —</option>${personOptions(-1)}</select></div>
           <div><label>Primeiro dia de férias</label><input type="date" id="vacStart"></div>
           <div><label>Último dia de férias</label><input type="date" id="vacEnd"></div>
           <div style="display:flex;align-items:flex-end"><button class="primary small" id="addVac">Adicionar férias</button></div>
         </div>
         ${cfg.vacations.length ? `<ul class="list">${[...cfg.vacations].map((v, i) => [v, i]).sort((a, b) => a[0].start.localeCompare(b[0].start)).map(([v, i]) => `<li><span><b>${esc(pname(v.person))}</b> — ${parse(v.start).toLocaleDateString("pt-BR")} a ${parse(v.end).toLocaleDateString("pt-BR")}</span><button class="danger small" data-delvac="${i}">Remover</button></li>`).join("")}</ul>` : `<p class="note">Nenhuma férias cadastrada.</p>`}
-        <p class="note" style="margin-top:14px"><b>Horários durante as férias</b></p>
-        <div class="slot-edit s1"><div class="grid4">
+        <p class="note rot-only" style="margin-top:14px"><b>Horários durante as férias</b></p>
+        <div class="slot-edit s1 rot-only"><div class="grid4">
           <div><label>Nome da função</label><input data-vacf="name" value="${esc(cfg.vacationSlots[0].name)}"></div>
           <div><label>Sábado</label><input data-vacf="sat" value="${esc(cfg.vacationSlots[0].sat)}"></div>
           <div><label>Sábado após o expediente</label><input data-vacf="after" value="${esc(cfg.vacationSlots[0].after || "")}"></div>
@@ -800,7 +1149,7 @@
         <ul class="list hol-list">${hols.map(h => `<li><span>${parse(h.date).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })} — ${esc(h.name)}</span><button class="danger small" data-delhol="${h.date}">Remover</button></li>`).join("")}</ul>
       </div>
 
-      <div class="sect">
+      <div class="sect rot-only">
         <h3>Escalas e horários</h3>
         <p class="lead note">Cada escala vale a partir da data de início (pelo sábado da semana). Em cada grupo o rodízio anda uma posição por semana: <b>posição 1 → 2 → 3 → … → 1</b>. Deixe o horário vazio quando não houver expediente naquele dia.</p>
         ${cfg.regimes.map((r, ri) => `<div class="regime">
@@ -842,8 +1191,18 @@
 
   function onConfigInput(e) {
     const t = e.target;
+    if (RULES_FEATURE && onRulesInput(t)) return;
+    if (t.id === "sectorInput") { cfg.sector = t.value; return saveConfig(false); }
     if (t.dataset.vacf) { cfg.vacationSlots[0][t.dataset.vacf] = t.value.trim(); return saveConfig(false); }
-    if (t.dataset.person !== undefined) { cfg.people[+t.dataset.person] = t.value.trim() || `Colaborador ${+t.dataset.person + 1}`; return saveConfig(false); }
+    if (t.dataset.person !== undefined) {
+      const i = +t.dataset.person, old = cfg.people[i], nv = t.value.trim() || `Colaborador ${i + 1}`;
+      // versão local: mantém o nome da Escala RH igual enquanto ele não for personalizado
+      if (!FB_ON) cfg.hr.employees.forEach(e => { if (e.links.length === 1 && e.links[0] === i && e.name === old.toUpperCase()) e.name = nv.toUpperCase(); });
+      cfg.people[i] = nv;
+      const emp = cfg.hr.employees.find(e => e.links.length === 1 && e.links[0] === i);
+      if (emp && t.nextElementSibling && t.nextElementSibling.classList.contains("note")) t.nextElementSibling.textContent = emp.name;
+      return saveConfig(false);
+    }
     if (t.dataset.reg !== undefined && t.dataset.f) {
       const r = cfg.regimes[+t.dataset.reg];
       let obj = r;
@@ -855,6 +1214,24 @@
   }
   function onConfigChange(e) {
     const t = e.target;
+    if (t.dataset.ui) { cfg.ui[t.dataset.ui] = t.checked; saveConfig("Exibição atualizada"); return; }
+    if (RULES_FEATURE && onRulesChange(t)) return;
+    if (t.dataset.sumaster !== undefined || t.dataset.surh !== undefined) {
+      const body = t.dataset.sumaster !== undefined ? { user: t.dataset.sumaster, master: t.checked } : { user: t.dataset.surh, rh: t.checked };
+      api("permissao", body).then(j => { srv.users = j.lista; renderConfig(); toast("Permissão atualizada"); }).catch(err => { toast(err.message); renderConfig(); });
+      return;
+    }
+    if (t.dataset.lumaster !== undefined || t.dataset.lurh !== undefined) {
+      const i = +(t.dataset.lumaster ?? t.dataset.lurh), x = localUsers[i];
+      if (t.dataset.lumaster !== undefined) x.master = t.checked; else x.rh = t.checked;
+      saveLocalUsers(localUsers); perm = localPerm(user); renderUser(); renderConfig(); renderHR(); toast("Permissão atualizada");
+      return;
+    }
+    if (t.dataset.urh !== undefined && fb) {
+      const list = access.list.map((x, i) => i === +t.dataset.urh ? { ...x, rh: t.checked } : x);
+      fb.saveUsers(list).then(() => toast("Permissão atualizada")).catch(err => toast("Não foi possível salvar: " + (err.code || err.message)));
+      return;
+    }
     if (t.id === "ewDate" && t.value) { state.editWeek = iso(mondayOf(parse(t.value))); renderConfig(); return; }
     if (t.dataset.ewslot !== undefined) {
       // Troca dentro do grupo: quem estava na posição escolhida assume a posição antiga
@@ -873,8 +1250,12 @@
     }
     else if (t.dataset.reg !== undefined) toast("Escala atualizada");
   }
-  function onConfigClick(e) {
+  async function onConfigClick(e) {
     const t = e.target.closest("button"); if (!t) return;
+    if (FB_ON && fb && await onUsersClick(t)) return;
+    if (SRV_ON && await onSrvUsersClick(t)) return;
+    if (!FB_ON && !SRV_ON && onLocalUsersClick(t)) return;
+    if (RULES_FEATURE && onRulesClick(t)) return;
     const ewKey = () => iso(mondayOf(parse($("ewDate").value || iso(today))));
     const ewOrders = () => {
       const o = {};
@@ -893,6 +1274,7 @@
     else if (t.dataset.delanchor) { const [d, g] = t.dataset.delanchor.split("|"); cfg.anchors = cfg.anchors.filter(a => !(a.date === d && a.group === g)); saveConfig("Ponto de início removido"); renderConfig(); }
     else if (t.id === "addVac") {
       const st = $("vacStart").value, en = $("vacEnd").value;
+      if ($("vacPerson").value === "") return toast("Selecione o colaborador que vai sair de férias");
       if (!st || !en) return toast("Preencha o primeiro e o último dia");
       if (en < st) return toast("O último dia precisa ser depois do primeiro");
       const v = { person: +$("vacPerson").value, start: st, end: en };
@@ -910,10 +1292,12 @@
       saveConfig("Feriado adicionado"); renderConfig();
     }
     else if (t.dataset.delhol) { cfg.holidays = cfg.holidays.filter(h => h.date !== t.dataset.delhol); saveConfig("Feriado removido"); renderConfig(); }
-    else if (t.id === "addPerson") { cfg.people.push(`Colaborador ${cfg.people.length + 1}`); saveConfig("Colaborador adicionado"); renderConfig(); }
+    else if (t.id === "addPerson") { cfg.people.push(`Colaborador ${cfg.people.length + 1}`);
+      if (!FB_ON) { const i = cfg.people.length - 1, id = "e" + Date.now().toString(36); cfg.hr.employees.push({ id, name: cfg.people[i].toUpperCase(), role: "", links: [i] }); cfg.hr.periods.forEach(p => p.t[id] = { work: ["1", "1", "1", "1", "1"], off: ["1", "1", "1", "1", "1"] }); } saveConfig("Colaborador adicionado"); renderConfig(); }
     else if (t.id === "delPerson") {
       const i = cfg.people.length - 1;
-      if (confirm(`Remover ${cfg.people[i]}? Se ele estiver em algum rodízio, outra pessoa ocupa o lugar.`)) { cfg.people.pop(); saveConfig("Colaborador removido"); renderConfig(); }
+      if (confirm(`Remover ${cfg.people[i]}? Se ele estiver em algum rodízio, outra pessoa ocupa o lugar.`)) { cfg.people.pop();
+        if (!FB_ON) cfg.hr.employees = cfg.hr.employees.filter(e => !(e.links.length === 1 && e.links[0] === i)).map(e => ({ ...e, links: e.links.filter(x => x !== i) })); saveConfig("Colaborador removido"); renderConfig(); }
     }
     else if (t.dataset.addslot) { const [ri, gi] = rg(t.dataset.addslot); cfg.regimes[ri].groups[gi].slots.push({ name: "Folga", sat: "", sun: "", oncall: false }); saveConfig("Posição adicionada"); renderConfig(); }
     else if (t.dataset.delslot) { const [ri, gi] = rg(t.dataset.delslot); cfg.regimes[ri].groups[gi].slots.pop(); saveConfig("Posição removida"); renderConfig(); }
@@ -929,7 +1313,7 @@
       last.name = "Nova escala"; last.start = iso(addDays(parse(last.start), 31));
       cfg.regimes.push(last); saveConfig("Nova escala criada"); renderConfig();
     }
-    else if (t.id === "exportCfg") download("escala-noc-config.json", JSON.stringify(cfg, null, 2), "application/json");
+    else if (t.id === "exportCfg") download(`escala-${slug()}-config.json`, JSON.stringify(cfg, null, 2), "application/json");
     else if (t.id === "importCfg") $("importFile").click();
     else if (t.id === "resetCfg") { if (confirm("Restaurar a configuração padrão? As alterações serão perdidas.")) { const keepHR = cfg.hr; cfg = migrate({}); cfg.hr = keepHR; saveConfig("Configuração restaurada"); renderConfig(); } }
   }
@@ -996,15 +1380,17 @@
       overrides: {}   // { empId: { "AAAA-MM-DD": "código" } }
     };
   }
-  const hrState = { editCell: null };
-  const codeById = id => cfg.hr.codes.find(c => c.id === String(id));
+  const hrState = { editCell: null, sel: new Set(), anchor: null };
+  const codeById = id => cfg.hr.codes.find(c => c.id === String(id).replace("@HO", ""));
+  const isHO = v => String(v).endsWith("@HO") || !!(codeById(v) && codeById(v).ho && !SPECIAL.includes(v));
   const tmin = t => { const [h, m] = String(t || "0:0").split(":").map(Number); return h * 60 + (m || 0); };
   function codeHours(c) {
     if (!c) return 0;
     let a = tmin(c.start), b = tmin(c.end); if (b <= a) b += 24 * 60;
     return Math.max(0, (b - a) / 60 - (+c.brk || 0));
   }
-  const label = v => { const c = codeById(v); return c && c.ho ? `HO - ${c.id}` : String(v); };
+  const label = v => { const c = codeById(v); if (!c || SPECIAL.includes(v)) return String(v); return isHO(v) ? (cfg.hr.hoFormat === "suffix" ? `${c.id} - HO` : `HO - ${c.id}`) : c.id; };
+  const codeChoices = () => cfg.hr.codes.flatMap(c => c.ho ? [c.id] : [c.id, c.id + "@HO"]);
   const valHours = v => SPECIAL.includes(v) ? 0 : codeHours(codeById(v));
   function hrPeriodFor(date) {
     const key = iso(date);
@@ -1030,6 +1416,13 @@
   function hrAuto(emp, d) {
     const dow = d.getDay();
     if (vacationOn(emp, d)) return "FÉRIAS";
+    if (rulesOn() && emp.links.length) {
+      const v = (ruleSchedule().day[iso(d)] || {})[emp.id], hol = holidayOf(d), P = rulePeriodFor(d);
+      if (dow === 0 || dow === 6) return v || (hol ? P.holOffLabel : dow === 6 ? "F" : P.offSunLabel);
+      if (hol) return v || P.holOffLabel;
+      if (v === "F") return "F";
+      const t = hrPeriodFor(d).t[emp.id]; return t ? t.work[dow - 1] || "" : "";
+    }
     const w = week(mondayOf(d));
     const info = weekendInfo(emp, w);
     const hol = holidayOf(d);
@@ -1047,30 +1440,40 @@
     const o = cfg.hr.overrides[emp.id] && cfg.hr.overrides[emp.id][iso(d)];
     return { v: o !== undefined ? o : hrAuto(emp, d), manual: o !== undefined };
   }
-  const cellCls = v => v === "DOM" ? "h-dom" : v === "FRD" ? "h-frd" : v === "F" ? "h-f" : v === "FÉRIAS" ? "h-fer" : (codeById(v) && codeById(v).ho) ? "h-ho" : v ? "h-num" : "";
+  const cellCls = v => v === "DOM" ? "h-dom" : v === "FRD" ? "h-frd" : v === "F" ? "h-f" : v === "FÉRIAS" ? "h-fer" : isHO(v) ? "h-ho" : v ? "h-num" : "";
   function monthDays() { const n = new Date(state.year, state.month + 1, 0).getDate(); return Array.from({ length: n }, (_, i) => new Date(state.year, state.month, i + 1, 12)); }
   const hdrDate = d => `${pad(d.getDate())}-${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}.`;
   function valueOptions(sel) {
     return `<option value="__auto">Automático</option>` + SPECIAL.map(s => `<option ${s === sel ? "selected" : ""}>${s}</option>`).join("")
-      + cfg.hr.codes.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(label(c.id))} — ${esc(c.desc)}</option>`).join("");
+      + codeChoices().map(v => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(label(v))} — ${esc(codeById(v).desc)}</option>`).join("");
   }
 
   function renderHR() {
     const box = $("hrPanel"); if (!box) return;
-    if (!user) { box.innerHTML = ""; return; }
+    if (!perm.rh) { box.innerHTML = ""; return; }
     $("hrMonth").innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(state.year, m)}</option>`).join("");
     const days = monthDays();
     const emps = cfg.hr.employees;
-    let html = `<table class="hr"><thead><tr><th class="nm">Nome</th>${days.map(d => `<th class="${holidayOf(d) ? "th-hol" : ""}">${hdrDate(d)}</th>`).join("")}</tr>
+    const RI = rulesOn() ? ruleIssues(days) : null;
+    const monthKeys = new Set(emps.flatMap(e => days.map(d => e.id + "|" + iso(d))));
+    hrState.sel = new Set([...hrState.sel].filter(k => monthKeys.has(k)));
+    const nSel = hrState.sel.size;
+    const tools = `<div class="hr-tools no-print">
+        <button class="secondary small" id="hrSelAll">Selecionar tudo</button>
+        ${nSel ? `<b>${nSel} célula(s)</b><select id="hrApplyVal">${valueOptions("")}</select><button class="primary small" id="hrApply">Aplicar</button><button class="secondary small" id="hrSelClear">Limpar seleção</button>`
+          : `<span class="note">Clique numa célula para selecionar • Ctrl+clique adiciona outras • Shift+clique seleciona um intervalo • clique no nome ou na data seleciona a linha ou a coluna</span>`}
+      </div>`;
+    let html = `<table class="hr"><thead><tr><th class="nm">Nome</th>${days.map(d => `<th class="colsel ${holidayOf(d) ? "th-hol" : ""}" data-col="${iso(d)}" title="Clique para selecionar a coluna">${hdrDate(d)}</th>`).join("")}</tr>
       <tr><th class="nm"></th>${days.map(d => `<th class="wd">${DAYABBR[d.getDay()]}</th>`).join("")}</tr></thead><tbody>`;
     emps.forEach(e => {
-      html += `<tr><td class="nm" title="${esc(e.role)}">${esc(e.name)}</td>`;
+      html += `<tr><td class="nm rowsel" data-row="${e.id}" title="${esc(e.role)} — clique para selecionar a linha">${esc(e.name)}</td>`;
       days.forEach(d => {
         const { v, manual } = hrValue(e, d);
         const editing = hrState.editCell === e.id + "|" + iso(d);
         html += editing
           ? `<td class="${cellCls(v)}"><select class="cellsel" data-hremp="${e.id}" data-hrdate="${iso(d)}">${valueOptions(manual ? v : "__none")}</select></td>`
-          : `<td class="hc ${cellCls(v)} ${manual ? "manual" : ""}" data-hremp="${e.id}" data-hrdate="${iso(d)}" title="${manual ? "Ajuste manual — clique para alterar" : "Clique para ajustar"}">${esc(label(v))}</td>`;
+          : (() => { const b = RI && RI.bad[e.id + "|" + iso(d)];
+            return `<td class="hc ${cellCls(v)} ${manual ? "manual" : ""} ${b ? "bad" : ""} ${hrState.sel.has(e.id + "|" + iso(d)) ? "sel" : ""}" data-hremp="${e.id}" data-hrdate="${iso(d)}" title="${b ? esc(b.join("; ")) + " — " : ""}${manual ? "Ajuste manual" : "Automático"}">${esc(label(v))}</td>`; })();
       });
       html += "</tr>";
     });
@@ -1088,12 +1491,16 @@
     ht += "</tbody></table>";
     const ti = weeks.map(w => week(w)).filter(w => w.items.some(x => x.slot.ti));
     box.innerHTML = `
+      ${tools}
       <div class="hr-scroll">${html}</div>
       <div class="legend" style="margin-top:12px">
         <span class="pill h-dom">DOM • domingo</span><span class="pill h-f">F • folga</span><span class="pill h-frd">FRD • feriado</span>
         <span class="pill h-fer">FÉRIAS</span><span class="pill h-ho">HO • home office</span>
-        <span class="note">Clique numa célula para ajustar manualmente (borda tracejada = ajuste manual).</span>
+        <span class="note">Borda roxa = ajuste manual.</span>
       </div>
+      ${RI ? `<div class="${RI.list.length ? "notice" : "okbox"}" style="margin-top:12px">${RI.list.length
+        ? `<b>Conferência das regras — ${RI.list.length} ponto(s) para revisar:</b><ul class="issues">${RI.list.map(i => `<li>${esc(i.text)}</li>`).join("")}</ul>`
+        : "<b>Conferência das regras:</b> tudo certo neste mês."}</div>` : ""}
       <div class="actions no-print">
         <button class="primary small" id="hrCopyCodes">Copiar só os códigos</button>
         <button class="secondary small" id="hrCopyAll">Copiar tabela com nomes e datas</button>
@@ -1108,7 +1515,7 @@
 
   function renderHRConfig() {
     const emps = cfg.hr.employees;
-    const opt = sel => cfg.hr.codes.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(label(c.id))}</option>`).join("")
+    const opt = sel => codeChoices().map(v => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(label(v))}</option>`).join("")
       + SPECIAL.map(s => `<option ${s === sel ? "selected" : ""}>${s}</option>`).join("");
     const periods = [...cfg.hr.periods].map((p, i) => [p, i]).sort((a, b) => a[0].start.localeCompare(b[0].start));
     return `
@@ -1143,7 +1550,8 @@
       <div class="actions"><button class="secondary small" id="hrAddPer">+ Novo período (copia o último)</button></div>
 
       <h4>Tabela de horários</h4>
-      <p class="note">As horas são calculadas pelo início, fim e intervalo. Marque HO para aparecer como “HO - código”.</p>
+      <p class="note">As horas são calculadas pelo início, fim e intervalo. Marque HO para o horário ser sempre home office; nos horários fixos também dá para escolher a versão HO só num dia (ex.: sexta).</p>
+      <div class="grid3" style="margin-bottom:8px"><div><label>Como mostrar o home office</label><select data-hrfmt="1"><option value="prefix" ${cfg.hr.hoFormat !== "suffix" ? "selected" : ""}>HO - 7</option><option value="suffix" ${cfg.hr.hoFormat === "suffix" ? "selected" : ""}>7 - HO</option></select></div></div>
       <div class="hr-scroll"><table class="tpl codes"><thead><tr><th>Código</th><th>Descrição</th><th>Início</th><th>Fim</th><th>Intervalo (h)</th><th>HO</th><th>Horas</th><th></th></tr></thead><tbody>
       ${cfg.hr.codes.map((c, i) => `<tr>
         <td><input data-hrcode-f="id" data-i="${i}" value="${esc(c.id)}" style="width:64px"></td>
@@ -1175,16 +1583,43 @@
     document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (e) {} ta.remove(); return ok;
   }
   function onHRClick(e) {
-    const cell = e.target.closest("td.hc");
-    if (cell) { hrState.editCell = cell.dataset.hremp + "|" + cell.dataset.hrdate; renderHR(); const s = document.querySelector(".cellsel"); if (s) s.focus(); return; }
+    const add = e.ctrlKey || e.metaKey;
+    const emps = cfg.hr.employees, days = monthDays().map(iso);
+    const sel = hrState.sel;
+    const cell = e.target.closest("td.hc"), row = e.target.closest("td.rowsel"), col = e.target.closest("th.colsel");
+    if (cell || row || col) {
+      if (!add && !e.shiftKey) sel.clear();
+      if (cell) {
+        const k = cell.dataset.hremp + "|" + cell.dataset.hrdate;
+        if (e.shiftKey && hrState.anchor) {
+          const [ae, ad] = hrState.anchor.split("|");
+          const i1 = emps.findIndex(x => x.id === ae), i2 = emps.findIndex(x => x.id === cell.dataset.hremp);
+          const d1 = days.indexOf(ad), d2 = days.indexOf(cell.dataset.hrdate);
+          for (let i = Math.min(i1, i2); i <= Math.max(i1, i2); i++) for (let j = Math.min(d1, d2); j <= Math.max(d1, d2); j++) if (i >= 0 && j >= 0) sel.add(emps[i].id + "|" + days[j]);
+        } else {
+          if (add && sel.has(k)) sel.delete(k); else sel.add(k);
+          hrState.anchor = k;
+        }
+      }
+      if (row) days.forEach(d => sel.add(row.dataset.row + "|" + d));
+      if (col) emps.forEach(x => sel.add(x.id + "|" + col.dataset.col));
+      renderHR(); return;
+    }
     const t = e.target.closest("button"); if (!t) return;
     const ri = (a) => +t.dataset[a];
+    if (t.id === "hrSelAll") { cfg.hr.employees.forEach(x => days.forEach(d => sel.add(x.id + "|" + d))); renderHR(); return; }
+    if (t.id === "hrSelClear") { sel.clear(); renderHR(); return; }
+    if (t.id === "hrApply") {
+      const v = $("hrApplyVal").value;
+      sel.forEach(k => { const [id, d] = k.split("|"); const o = cfg.hr.overrides[id] || (cfg.hr.overrides[id] = {}); if (v === "__auto") delete o[d]; else o[d] = v; });
+      saveConfig(v === "__auto" ? `${sel.size} célula(s) voltaram ao automático` : `${sel.size} célula(s) ajustada(s)`); return;
+    }
     if (t.id === "hrCopyCodes" || t.id === "hrCopyAll") {
       copyText(hrTSV(t.id === "hrCopyAll").map(r => r.join("\t")).join("\r\n")).then(ok => toast(ok ? "Copiado! Agora é só colar no controle do RH" : "Não consegui copiar — use o CSV"));
     }
     else if (t.id === "hrCsv") {
       const csv = "﻿" + hrTSV(true).map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
-      download(`escala-rh-${state.year}-${pad(state.month + 1)}.csv`, csv, "text/csv;charset=utf-8;");
+      download(`escala-rh-${slug()}-${state.year}-${pad(state.month + 1)}.csv`, csv, "text/csv;charset=utf-8;");
     }
     else if (t.id === "hrClearMonth") {
       if (!confirm("Remover todos os ajustes manuais deste mês?")) return;
@@ -1215,6 +1650,7 @@
       if (t.value === "__auto") delete o[d]; else o[d] = t.value;
       hrState.editCell = null; saveConfig("Célula ajustada"); return;
     }
+    if (t.dataset.hrfmt) { cfg.hr.hoFormat = t.value; return saveConfig("Formato atualizado"); }
     if (t.dataset.hrlink) {
       const [i, pi] = t.dataset.hrlink.split("|").map(Number); const L = cfg.hr.employees[i].links;
       if (t.checked && !L.includes(pi)) L.push(pi); if (!t.checked) cfg.hr.employees[i].links = L.filter(x => x !== pi);
@@ -1236,6 +1672,599 @@
     if (t.dataset.hrempF) { cfg.hr.employees[+t.dataset.i][t.dataset.hrempF] = t.value; saveConfig(false, true); }
     else if (t.dataset.hrperF === "name") { cfg.hr.periods[+t.dataset.i].name = t.value; saveConfig(false, true); }
     else if (t.dataset.hrcodeF === "desc") { cfg.hr.codes[+t.dataset.i].desc = t.value; saveConfig(false, true); }
+  }
+
+  // ================= REGRAS DO SETOR (escala automática — versão local) =================
+  const RULES_FEATURE = !FB_ON;
+  const WDN = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
+  function defaultRulePeriod() { return {
+    name: "Regras gerais", start: "2026-01-01",
+    satCoverage: [{ code: "2", count: 1 }],
+    sunCoverage: [{ code: "5", count: 1 }],
+    sunOffMin: { M: 1, F: 2 },
+    maxConsecSun: { M: 3, F: 1 },
+    holCoverage: [],
+    fullOffAfterBoth: false,
+    hoWeekend: true,
+    offSunLabel: "DOM", holOffLabel: "FRD",
+    comp: { when: "same", days: [1, 2, 3, 4, 5], maxPerDay: 1, minWorkers: 0 },
+    workDays: 5, weeklyHours: 40, minRest: 11
+  }; }
+  function defaultRules() { return { enabled: false, notes: "", periods: [defaultRulePeriod()] }; }
+  const rulesOn = () => RULES_FEATURE && cfg.rules && cfg.rules.enabled;
+  let cfgVersion = 0;
+  function rulePeriodFor(d) {
+    const key = iso(d);
+    const sorted = [...cfg.rules.periods].sort((a, b) => a.start.localeCompare(b.start));
+    let p = sorted[0]; sorted.forEach(x => { if (x.start <= key) p = x; });
+    return p;
+  }
+  const genderOf = e => e.gender === "F" ? "F" : "M";
+  const fmtH = t => { const [h, m] = String(t || "0:0").split(":").map(Number); return h + "h" + (m ? pad(m) : ""); };
+  const codeTime = c => c ? `${fmtH(c.start)} às ${fmtH(c.end)}` : "";
+  // início e fim (minutos a partir da meia-noite do dia) de um código; null se não for turno
+  function span(v) {
+    const c = codeById(v); if (!c || SPECIAL.includes(v)) return null;
+    const a = tmin(c.start); let b = tmin(c.end); if (b <= a) b += 1440;
+    return [a, b];
+  }
+
+  let ruleCache = { v: -1 };
+  const wdOf = e => +e.workDays || 0;
+  function ruleSchedule() {
+    if (ruleCache.v === cfgVersion) return ruleCache;
+    const all = cfg.hr.employees.filter(e => e.links.length);
+    const pool = all.filter(e => e.weekend !== false && !e.plantao);
+    const day = {}, issues = [];
+    const put = (d, id, v) => { (day[iso(d)] ||= {})[id] = v; };
+    const get = (d, id) => day[iso(d)] && day[iso(d)][id];
+    const st = Object.fromEntries(pool.map(e => [e.id, { prev: null, both: 0, none: 0, sunW: 0, consec: 0, hol: 0, lastBoth: -99 }]));
+    const sunOff = {}, sunWork = {};   // id|AAAA-MM -> contagem
+    const offCount = {}, mgrHol = {};
+    const start = mondayOf(new Date(YEARS[0], 0, 1, 12)), end = new Date(YEARS[YEARS.length - 1], 11, 31, 12);
+    const fixedCode = (e, d) => { const t = hrPeriodFor(d).t[e.id]; return t ? t.work[d.getDay() - 1] || "" : ""; };
+    const short = e => e.name.split(" ")[0];
+    const pl = cfg.rules.plantao || {};
+    // valor de um dia para conferência de descanso (já atribuído, ou horário fixo em dia útil)
+    const valAt = (e, d) => { const v = get(d, e.id); if (v) return v; const w = d.getDay(); return w >= 1 && w <= 5 && !holidayOf(d) ? fixedCode(e, d) : ""; };
+    const restBad = (a, b, min) => { const sa = span(a), sb = span(b); return sa && sb && 1440 + sb[0] - sa[1] < min ? 1 : 0; };
+    // distribui os horários do dia entre as pessoas, evitando menos descanso que o mínimo
+    function assignCodes(d, people, slots, ho, min) {
+      if (!people.length) return;
+      const list = slots.length ? slots.slice() : [""];
+      while (list.length < people.length) list.push(list[list.length - 1]);
+      const prev = addDays(d, -1), next = addDays(d, 1);
+      const cost = (e, c) => restBad(valAt(e, prev), c, min) + restBad(c, valAt(e, next), min);
+      let left = people.slice(), free = list.map((c, i) => i);
+      while (left.length) {
+        let best = null;
+        left.forEach(e => {
+          const opts = free.map(i => [i, cost(e, list[i])]).sort((a, b) => a[1] - b[1]);
+          const zeros = opts.filter(o => o[1] === 0).length;
+          const cand = [e, opts[0][0], opts[0][1], zeros];
+          if (!best || cand[2] < best[2] || (cand[2] === best[2] && cand[3] < best[3])) best = cand;
+        });
+        const [e, i] = best;
+        put(d, e.id, list[i] ? list[i] + ho : "F");
+        left = left.filter(x => x !== e); free = free.filter(x => x !== i);
+      }
+    }
+    let wn = 0;
+    for (let m = start; m <= end; m = addDays(m, 7), wn++) {
+      const sat = addDays(m, 5), sun = addDays(m, 6);
+      const P = rulePeriodFor(sun);
+      const HO = P.hoWeekend ? "@HO" : "";
+      const min = (+P.minRest || 0) * 60;
+      const rot = e => mod(pool.indexOf(e) - wn, Math.max(1, pool.length));
+      const slots = k => P[k].flatMap(c => Array(Math.max(0, +c.count || 0)).fill(c.code));
+      // ---- 1) Plantão da gestão (sábado a sexta) ----
+      const plw = plantonistaFor(m);
+      if (plw) { if (pl.satCode) put(sat, plw.id, pl.satCode + HO); if (pl.sunCode) put(sun, plw.id, pl.sunCode + HO); }
+      // ---- 2) Feriados em dia útil ----
+      for (let i = 0; i < 5; i++) {
+        const d = addDays(m, i); if (!holidayOf(d)) continue;
+        // gestão no feriado: por padrão fica com quem NÃO está de plantão no fim de semana desta semana
+        if (pl.holCode && pl.holWho !== "none") {
+          const mgrs = all.filter(e => e.plantao && !vacationOn(e, d));
+          const who = pl.holWho === "same" ? (plw && mgrs.includes(plw) ? plw : null)
+            : mgrs.filter(e => e !== plw).sort((a, b) => (mgrHol[a.id] || 0) - (mgrHol[b.id] || 0))[0] || (plw && mgrs.includes(plw) ? plw : null);
+          if (who) { put(d, who.id, pl.holCode + HO); mgrHol[who.id] = (mgrHol[who.id] || 0) + 1; }
+        }
+        const hs = slots("holCoverage");
+        const cands = pool.filter(e => !vacationOn(e, d)).sort((a, b) => (st[a.id].hol - st[b.id].hol) || (rot(a) - rot(b)));
+        const pick = cands.slice(0, hs.length);
+        if (pick.length < hs.length) issues.push({ date: iso(d), text: `Feriado ${dm(d)}: faltam ${hs.length - pick.length} pessoa(s) para a cobertura.` });
+        assignCodes(d, pick, hs, HO, min); pick.forEach(e => st[e.id].hol++);
+      }
+      // ---- 3) Fim de semana dos operadores ----
+      const ym = iso(sun).slice(0, 7);
+      const suns = []; for (let d = new Date(sun.getFullYear(), sun.getMonth(), 1, 12); d.getMonth() === sun.getMonth(); d = addDays(d, 1)) if (d.getDay() === 0) suns.push(iso(d));
+      const remaining = suns.length - suns.indexOf(iso(sun));
+      const avail = pool.filter(e => !vacationOn(e, sat) && !vacationOn(e, sun));
+      const nSat = slots("satCoverage").length, nSun = slots("sunCoverage").length;
+      const needOff = e => Math.max(0, (+P.sunOffMin[genderOf(e)] || 0) - (sunOff[e.id + "|" + ym] || 0));
+      const canSun = e => needOff(e) < remaining && st[e.id].consec < (+P.maxConsecSun[genderOf(e)] || 99);
+      const slack = e => remaining - needOff(e);
+      const N = avail.length;
+      const minW = Math.min(N, Math.max(nSat, nSun, Math.ceil((nSat + nSun) / 2)));
+      let noneSet;
+      if (P.fullOffAfterBoth) {
+        // só folga o fim de semana inteiro quem trabalhou sábado e domingo na semana anterior
+        noneSet = avail.filter(e => st[e.id].prev === "both").sort((a, b) => (slack(a) - slack(b)) || (rot(a) - rot(b))).slice(0, N - minW);
+      } else {
+        const W = Math.min(N, Math.max(minW, nSat + nSun > N ? N : nSat + nSun));
+        noneSet = avail.slice().sort((a, b) => (st[a.id].none - st[b.id].none) || (slack(a) - slack(b)) || (rot(a) - rot(b))).slice(0, N - W);
+      }
+      const workers = avail.filter(e => !noneSet.includes(e));
+      const W = workers.length;
+      const b = Math.max(0, nSat + nSun - W);
+      const bothOrder = (x, y) => (canSun(y) - canSun(x)) || ((st[x.id].prev === "both") - (st[y.id].prev === "both")) || (st[x.id].both - st[y.id].both) || (slack(y) - slack(x)) || (rot(x) - rot(y));
+      const bothSet = workers.slice().sort(bothOrder).slice(0, b);
+      bothSet.filter(e => !canSun(e)).forEach(e => issues.push({ date: iso(sun), text: `Domingo ${dm(sun)}: ${short(e)} precisou trabalhar sábado e domingo além do limite de domingos.` }));
+      let rest = workers.filter(e => !bothSet.includes(e));
+      const needSun = Math.max(0, nSun - bothSet.length);
+      const sunOrder = (x, y) => (canSun(y) - canSun(x)) || (slack(y) - slack(x)) || ((sunWork[x.id + "|" + ym] || 0) - (sunWork[y.id + "|" + ym] || 0)) || (st[x.id].sunW - st[y.id].sunW) || (rot(x) - rot(y));
+      const sunOnly = rest.slice().sort(sunOrder).slice(0, needSun);
+      sunOnly.filter(e => !canSun(e)).forEach(e => issues.push({ date: iso(sun), text: `Domingo ${dm(sun)}: ${short(e)} trabalha além do limite de domingos para completar a cobertura.` }));
+      const satOnly = rest.filter(e => !sunOnly.includes(e));
+      const satPeople = bothSet.concat(satOnly), sunPeople = bothSet.concat(sunOnly);
+      if (satPeople.length < nSat) issues.push({ date: iso(sat), text: `Sábado ${dm(sat)}: faltam ${nSat - satPeople.length} pessoa(s) para a cobertura.` });
+      if (sunPeople.length < nSun) issues.push({ date: iso(sun), text: `Domingo ${dm(sun)}: faltam ${nSun - sunPeople.length} pessoa(s) para a cobertura.` });
+      assignCodes(sat, satPeople, slots("satCoverage"), HO, min);
+      assignCodes(sun, sunPeople, slots("sunCoverage"), HO, min);
+      // estado da semana para a próxima
+      pool.forEach(e => {
+        const s = st[e.id], k = e.id + "|" + ym;
+        if (!avail.includes(e)) { s.prev = null; s.consec = 0; sunOff[k] = (sunOff[k] || 0) + 1; return; }
+        const ws = satPeople.includes(e), wu = sunPeople.includes(e);
+        s.prev = ws && wu ? "both" : ws ? "sat" : wu ? "sun" : "none";
+        if (s.prev === "both") { s.both++; s.lastBoth = wn; }
+        if (s.prev === "none") s.none++;
+        if (wu) { s.consec++; s.sunW++; sunWork[k] = (sunWork[k] || 0) + 1; } else { s.consec = 0; sunOff[k] = (sunOff[k] || 0) + 1; }
+      });
+      // ---- 4) Folgas compensatórias (escala NxM por pessoa) ----
+      const base = P.comp.when === "next" ? addDays(m, 7) : m;
+      const windowDays = [0, 1, 2, 3, 4, 5].map(i => addDays(base, i)).filter(d => P.comp.days.includes(d.getDay()));
+      const week = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(m, i));
+      const works = (e, d) => {
+        if (vacationOn(e, d)) return false;
+        const v = get(d, e.id), w = d.getDay();
+        if (w === 0 || w === 6 || holidayOf(d)) return !!v && v !== "F";
+        return v !== "F" && !!fixedCode(e, d);
+      };
+      const order = all.filter(e => !week.some(d => vacationOn(e, d))).sort((x, y) => (rot(x) || 0) - (rot(y) || 0));
+      order.forEach(e => {
+        const target = wdOf(e) || +P.workDays || 5;
+        let need = week.filter(d => works(e, d)).length - target;
+        while (need-- > 0) {
+          const workersLeft = d => all.filter(x => !vacationOn(x, d) && get(d, x.id) !== "F").length - 1;
+          const cands = windowDays.filter(d => !holidayOf(d) && !vacationOn(e, d) && !get(d, e.id) && !!fixedCode(e, d)
+            && (offCount[iso(d)] || 0) < (+P.comp.maxPerDay || 99) && workersLeft(d) >= (+P.comp.minWorkers || 0));
+          if (!cands.length) { issues.push({ date: iso(sun), text: `${short(e)}: não foi possível marcar a folga compensatória da semana de ${dm(m)} dentro das regras.` }); break; }
+          const fix = d => restBad(valAt(e, addDays(d, -1)), fixedCode(e, d), min) + restBad(fixedCode(e, d), valAt(e, addDays(d, 1)), min);
+          cands.sort((a, c) => (fix(c) - fix(a)) || ((c.getDay() === +e.prefDay) - (a.getDay() === +e.prefDay)) || ((offCount[iso(a)] || 0) - (offCount[iso(c)] || 0)) || (a - c));
+          const d = cands[0];
+          put(d, e.id, "F"); offCount[iso(d)] = (offCount[iso(d)] || 0) + 1;
+        }
+      });
+    }
+    ruleCache = { v: cfgVersion, day, issues };
+    return ruleCache;
+  }
+  // Plantão do fim de semana: revezamento semanal entre quem tem "Faz plantão" marcado
+  function plantonistaFor(monday) {
+    const list = cfg.hr.employees.filter(e => e.plantao && e.links.length);
+    if (!list.length) return null;
+    const pl = cfg.rules.plantao || {};
+    const start = pl.start ? mondayOf(parse(pl.start)) : mondayOf(new Date(YEARS[0], 0, 1, 12));
+    const i0 = Math.max(0, list.findIndex(e => e.id === pl.first));
+    const w = weeksBetween(start, monday);
+    for (let k = 0; k < list.length; k++) {
+      const e = list[mod(i0 + w + k, list.length)];
+      if (!vacationOn(e, addDays(monday, 5)) && !vacationOn(e, addDays(monday, 6))) return e;
+    }
+    return null;
+  }
+  // Semana no formato usado pelo painel, previsão e calendário
+  function ruleWeek(monday) {
+    const sat = addDays(monday, 5), sun = addDays(monday, 6);
+    const r = ruleSchedule(), P = rulePeriodFor(sun);
+    const items = [];
+    const pl = plantonistaFor(monday);
+    if (pl) items.push({ person: pl.links[0], slot: { name: "Plantonista do fim de semana", sat: "", sun: "", oncall: true } });
+    cfg.hr.employees.filter(e => e.links.length).forEach(e => {
+      const p = e.links[0];
+      const vs = r.day[iso(sat)] && r.day[iso(sat)][e.id], vd = r.day[iso(sun)] && r.day[iso(sun)][e.id];
+      if (vs) items.push({ person: p, slot: { name: "Sábado", sat: codeTime(codeById(vs)), sun: "", oncall: false } });
+      if (vd) items.push({ person: p, slot: { name: "Domingo", sat: "", sun: codeTime(codeById(vd)), oncall: false } });
+      if (!vs && !vd && e !== pl && e.weekend !== false && !vacationOn(e, sat) && !vacationOn(e, sun)) items.push({ person: p, slot: { name: "Folga", sat: "", sun: "", oncall: false } });
+    });
+    const satWork = items.filter(x => x.slot.sat).sort((a, b) => a.slot.sat.localeCompare(b.slot.sat, "pt-BR", { numeric: true }));
+    const sunWork = items.filter(x => x.slot.sun);
+    const satH = !satWork.length ? holidayOf(sat) : null, sunH = !sunWork.length ? holidayOf(sun) : null;
+    const onVac = cfg.hr.employees.filter(e => e.links.length && (vacationOn(e, sat) || vacationOn(e, sun))).map(e => e.links[0]);
+    return { monday, sat, sun, reg: { name: P.name, start: P.start, groups: [] }, key: iso(monday), items, groupsView: [], oncall: items.filter(x => x.slot.oncall), satH, sunH, satWork, sunWork,
+      off: items.filter(x => x.slot.name === "Folga"), onVac, overridden: false };
+  }
+  // Conferência das regras na grade final (inclui ajustes manuais)
+  function ruleIssues(days) {
+    const out = [...ruleSchedule().issues.filter(i => days.some(d => iso(d).slice(0, 7) === i.date.slice(0, 7)))];
+    const bad = {};
+    const flag = (e, d, txt) => { (bad[e.id + "|" + iso(d)] ||= []).push(txt); };
+    const ym = iso(days[0]).slice(0, 7);
+    cfg.hr.employees.forEach(e => {
+      const val = d => hrValue(e, d).v;
+      const isOff = v => ["F", "DOM", "FRD", "FÉRIAS", ""].includes(v);
+      const P = rulePeriodFor(days[days.length - 1]);
+      // domingos de folga no mês
+      const suns = days.filter(d => d.getDay() === 0);
+      const offSun = suns.filter(d => isOff(val(d))).length, need = +P.sunOffMin[genderOf(e)] || 0;
+      if (e.links.length && offSun < need) out.push({ text: `${e.name}: ${offSun} domingo(s) de folga no mês — a regra pede ${need}.` });
+      // domingos seguidos
+      let run = 0; const maxC = +P.maxConsecSun[genderOf(e)] || 99;
+      for (let d = addDays(mondayOf(days[0]), -42); d <= days[days.length - 1]; d = addDays(d, 1)) {
+        if (d.getDay() !== 0) continue;
+        run = isOff(val(d)) ? 0 : run + 1;
+        if (run > maxC && iso(d).slice(0, 7) === ym) { out.push({ text: `${e.name}: ${run} domingos seguidos trabalhados até ${dm(d)} (máximo ${maxC}).` }); flag(e, d, "Domingos seguidos acima do limite"); }
+      }
+      // semanas: folgas (5x2), horas e descanso
+      for (let m = mondayOf(days[0]); m <= days[days.length - 1]; m = addDays(m, 7)) {
+        const wk = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(m, i));
+        const Pw = rulePeriodFor(wk[6]);
+        const wd = wdOf(e) || +Pw.workDays || 5;
+        const offs = wk.filter(d => isOff(val(d))).length, needOff = 7 - wd;
+        if (e.links.length && !wk.some(d => val(d) === "FÉRIAS") && offs < needOff) { out.push({ text: `${e.name}: semana de ${dm(m)} com ${offs} folga(s) — a escala ${wd}x${needOff} pede ${needOff}.` }); }
+        if (Pw.fullOffAfterBoth && e.links.length && e.weekend !== false && !e.plantao && isOff(val(wk[5])) && isOff(val(wk[6])) && !wk.some(d => val(d) === "FÉRIAS")) {
+          const pv = addDays(m, -2), pu = addDays(m, -1);
+          if (isOff(val(pv)) || isOff(val(pu))) { out.push({ text: `${e.name}: folga no fim de semana ${dm(wk[5])}/${dm(wk[6])} sem ter trabalhado sábado e domingo na semana anterior.` }); flag(e, wk[5], "Fim de semana de folga sem ter trabalhado o anterior"); }
+        }
+        const clean = wk.every(d => !holidayOf(d) && val(d) !== "FÉRIAS");
+        const h = wk.reduce((s, d) => s + valHours(val(d)), 0);
+        const meta = +e.weeklyHours || +Pw.weeklyHours;
+        if (clean && offs <= needOff && meta && h && Math.abs(h - meta) > 0.01 && e.links.length) out.push({ text: `${e.name}: semana de ${dm(m)} com ${h}h (meta ${meta}h).` });
+      }
+      days.forEach(d => {
+        const P2 = rulePeriodFor(d), min = (+P2.minRest || 0) * 60;
+        const a = span(val(addDays(d, -1))), b = span(val(d));
+        if (min && a && b && 1440 + b[0] - a[1] < min) {
+          const hrs = Math.round((1440 + b[0] - a[1]) / 6) / 10;
+          out.push({ text: `${e.name}: só ${hrs}h de descanso entre ${dm(addDays(d, -1))} e ${dm(d)} (mínimo ${P2.minRest}h).` });
+          flag(e, d, `Descanso de ${hrs}h`);
+        }
+      });
+    });
+    return { list: out, bad };
+  }
+
+  // ---------- Tela de regras ----------
+  const baseOpts = (sel, empty) => `<option value="">${esc(empty || "")}</option>` + cfg.hr.codes.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(c.id)} — ${esc(c.desc)}</option>`).join("");
+  function renderRulesSection() {
+    if (!RULES_FEATURE) return "";
+    const R = cfg.rules;
+    const codeOpts = sel => `<option value=""></option>` + cfg.hr.codes.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(label(c.id))} — ${esc(c.desc)}</option>`).join("");
+    const periods = [...R.periods].map((p, i) => [p, i]).sort((a, b) => a[0].start.localeCompare(b[0].start));
+    const cov = (p, pi, k) => `${p[k].map((c, ci) => `<div class="cov-row"><select data-rcov="${pi}|${k}|${ci}|code">${baseOpts(c.code)}</select>
+        <input type="number" min="0" data-rcov="${pi}|${k}|${ci}|count" value="${c.count}" style="width:70px"> pessoa(s)
+        <button class="danger small" data-rcovdel="${pi}|${k}|${ci}">×</button></div>`).join("")}
+        <button class="secondary small" data-rcovadd="${pi}|${k}">+ Turno</button>`;
+    return `<div class="sect rules">
+      <h3>Regras do setor (escala automática)</h3>
+      <label class="check" style="margin:6px 0 10px"><input type="checkbox" id="rulesEnabled" ${R.enabled ? "checked" : ""}> Montar a escala automaticamente seguindo as regras abaixo</label>
+      <p class="lead note">Ligado, a página escolhe quem trabalha em cada sábado, domingo e feriado, marca as folgas compensatórias e confere as regras na aba Escala RH. Quem tem “Faz plantão” marcado não entra no rodízio dos operadores: trabalha só no fim de semana do seu plantão. Os horários fixos da semana de cada pessoa ficam em <b>Escala RH → Configurar escala RH</b> (linha “Trabalha no fim de semana”).</p>
+      <div><label>Individualidades do setor (anotações livres)</label><textarea id="rulesNotes" rows="3" placeholder="ex.: Suporte Técnico PF — homens folgam 1 domingo por mês, mulheres 2; quem trabalha no domingo folga um dia na semana...">${esc(R.notes || "")}</textarea></div>
+      <h4>Colaboradores</h4>
+      <div class="hr-scroll"><table class="tpl"><thead><tr><th>Colaborador</th><th>Sexo</th><th>Entra no rodízio do fim de semana</th><th>Faz plantão</th><th>Dias/semana</th><th>Horas/semana</th><th>Folga compensatória preferida</th><th>Na escala</th></tr></thead><tbody>
+      ${cfg.hr.employees.map((e, i) => `<tr><td class="nm">${e.links.length === 1 ? `<input data-person="${e.links[0]}" value="${esc(cfg.people[e.links[0]] || "")}" title="Nome curto usado na escala">
+          <div class="note" style="font-size:.7rem;margin-top:2px">${esc(e.name)}</div>` : esc(e.name)}</td>
+        <td><select data-remp="${i}|gender"><option value="M" ${genderOf(e) === "M" ? "selected" : ""}>Homem</option><option value="F" ${genderOf(e) === "F" ? "selected" : ""}>Mulher</option></select></td>
+        <td><input type="checkbox" data-remp="${i}|weekend" ${e.weekend !== false ? "checked" : ""} title="Entra no sorteio de sábado e domingo"></td>
+        <td><input type="checkbox" data-remp="${i}|plantao" ${e.plantao ? "checked" : ""} title="Entra no revezamento do plantão do fim de semana"></td>
+        <td><input type="number" min="1" max="7" style="width:64px" data-remp="${i}|workDays" value="${esc(e.workDays || "")}" placeholder="padrão"></td>
+        <td><input type="number" min="0" style="width:70px" data-remp="${i}|weeklyHours" value="${esc(e.weeklyHours || "")}" placeholder="padrão"></td>
+        <td><select data-remp="${i}|prefDay"><option value="0">Sem preferência</option>${[1, 2, 3, 4, 5, 6].map(d => `<option value="${d}" ${+e.prefDay === d ? "selected" : ""}>${WDN[d]}</option>`).join("")}</select></td>
+        <td>${e.links.length ? "✓" : `<span class="note">sem vínculo — não entra no sorteio</span>`}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="actions"><button class="secondary small" id="addPersonRules">+ Colaborador</button>${cfg.people.length > 1 ? `<button class="danger small" id="delPersonRules">Remover o último</button>` : ""}</div>
+      <div class="rule-box" style="margin-top:12px"><b>Plantão do fim de semana</b>
+        <p class="note" style="margin:4px 0 8px">Reveza toda semana entre quem tem “Faz plantão” marcado (ex.: só a equipe de gestão). Quem é só plantonista pode ter “Trabalha nos fins de semana” desmarcado.</p>
+        ${cfg.hr.employees.some(e => e.plantao) ? `<div class="grid3">
+          <div><label>Semana de início do revezamento</label><input type="date" data-rpl="start" value="${esc((cfg.rules.plantao || {}).start || "")}"></div>
+          <div><label>Primeiro plantonista</label><select data-rpl="first">${cfg.hr.employees.filter(e => e.plantao).map(e => `<option value="${e.id}" ${(cfg.rules.plantao || {}).first === e.id ? "selected" : ""}>${esc(pname(e.links[0]) || e.name)}</option>`).join("")}</select></div>
+        </div>
+        <div class="grid3" style="margin-top:10px">
+          <div><label>Horário do plantonista no sábado</label><select data-rpl="satCode">${baseOpts(cfg.rules.plantao.satCode, "Só sobreaviso (sem horário)")}</select></div>
+          <div><label>Horário do plantonista no domingo</label><select data-rpl="sunCode">${baseOpts(cfg.rules.plantao.sunCode, "Só sobreaviso (sem horário)")}</select></div>
+        </div>
+        <div class="grid3" style="margin-top:10px">
+          <div><label>Feriado em dia útil — horário da gestão</label><select data-rpl="holCode">${baseOpts(cfg.rules.plantao.holCode, "Gestão não trabalha no feriado")}</select></div>
+          <div><label>Feriado em dia útil — quem da gestão trabalha</label><select data-rpl="holWho">
+            <option value="other" ${cfg.rules.plantao.holWho !== "same" && cfg.rules.plantao.holWho !== "none" ? "selected" : ""}>Quem não está de plantão no fim de semana daquela semana</option>
+            <option value="same" ${cfg.rules.plantao.holWho === "same" ? "selected" : ""}>Quem está de plantão no fim de semana daquela semana</option>
+            <option value="none" ${cfg.rules.plantao.holWho === "none" ? "selected" : ""}>Ninguém da gestão</option></select></div>
+        </div>
+        <p class="note" style="margin:8px 0 0">O plantão vale só para sábado e domingo; de segunda a sexta a gestão segue o horário fixo. Feriados em dia útil seguem a opção acima, e quem não trabalha folga.</p>` : `<p class="note">Ninguém marcado em “Faz plantão”.</p>`}
+      </div>
+      <p class="note">Não há limite de colaboradores. O nome completo (usado na Escala RH) pode ser alterado em Escala RH → Configurar escala RH.</p>
+      <h4>Regras por período</h4>
+      <p class="note">Crie um período novo quando a quantidade de pessoas ou as regras mudarem (ex.: a partir de dezembro).</p>
+      ${periods.map(([p, pi]) => `<div class="regime">
+        <div class="grid3">
+          <div><label>Nome do período</label><input data-rper="${pi}|name" value="${esc(p.name)}"></div>
+          <div><label>Vale a partir de</label><input type="date" data-rper="${pi}|start" value="${p.start}"></div>
+          <div style="display:flex;align-items:flex-end;justify-content:flex-end">${R.periods.length > 1 ? `<button class="danger small" data-rperdel="${pi}">Remover período</button>` : ""}</div>
+        </div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="rule-box"><b>Cobertura do sábado</b>${cov(p, pi, "satCoverage")}</div>
+          <div class="rule-box"><b>Cobertura do domingo</b>${cov(p, pi, "sunCoverage")}</div>
+        </div>
+        <div class="grid4" style="margin-top:12px">
+          <div><label>Domingos de folga no mês — homens</label><input type="number" min="0" max="5" data-rper="${pi}|sunOffMin.M" value="${p.sunOffMin.M}"></div>
+          <div><label>Domingos de folga no mês — mulheres</label><input type="number" min="0" max="5" data-rper="${pi}|sunOffMin.F" value="${p.sunOffMin.F}"></div>
+          <div><label>Máx. domingos seguidos — homens</label><input type="number" min="1" data-rper="${pi}|maxConsecSun.M" value="${p.maxConsecSun.M}"></div>
+          <div><label>Máx. domingos seguidos — mulheres</label><input type="number" min="1" data-rper="${pi}|maxConsecSun.F" value="${p.maxConsecSun.F}"></div>
+        </div>
+        <div class="rule-box" style="margin-top:12px"><b>Cobertura de feriado em dia útil</b>${cov(p, pi, "holCoverage")}</div>
+        <label class="check"><input type="checkbox" data-rper="${pi}|fullOffAfterBoth" ${p.fullOffAfterBoth ? "checked" : ""}> Só folga o fim de semana inteiro quem trabalhou sábado e domingo na semana anterior</label>
+        <label class="check" style="margin-top:6px"><input type="checkbox" data-rper="${pi}|hoWeekend" ${p.hoWeekend ? "checked" : ""}> Fim de semana e feriado em home office</label>
+        <div class="grid4" style="margin-top:10px">
+          <div><label>Folga no domingo aparece como</label><select data-rper="${pi}|offSunLabel"><option ${p.offSunLabel === "DOM" ? "selected" : ""}>DOM</option><option ${p.offSunLabel === "F" ? "selected" : ""}>F</option></select></div>
+          <div><label>Folga em feriado aparece como</label><select data-rper="${pi}|holOffLabel"><option ${p.holOffLabel === "FRD" ? "selected" : ""}>FRD</option><option ${p.holOffLabel === "F" ? "selected" : ""}>F</option></select></div>
+        </div>
+        <div class="rule-box" style="margin-top:12px"><b>Folga compensatória</b>
+          <div class="grid4" style="margin-top:8px">
+            <div><label>Quando</label><select data-rper="${pi}|comp.when"><option value="same" ${p.comp.when === "same" ? "selected" : ""}>Na mesma semana do fim de semana trabalhado</option><option value="next" ${p.comp.when === "next" ? "selected" : ""}>Na semana seguinte</option></select></div>
+            <div><label>Dias permitidos</label><div class="links">${[1, 2, 3, 4, 5, 6].map(d => `<label class="check" style="margin:0"><input type="checkbox" data-rcompday="${pi}|${d}" ${p.comp.days.includes(d) ? "checked" : ""}> ${WDN[d]}</label>`).join("")}</div></div>
+            <div><label>Máx. de folgas no mesmo dia</label><input type="number" min="1" data-rper="${pi}|comp.maxPerDay" value="${p.comp.maxPerDay}"></div>
+            <div><label>Mínimo de pessoas trabalhando no dia</label><input type="number" min="0" data-rper="${pi}|comp.minWorkers" value="${p.comp.minWorkers}"></div>
+          </div>
+        </div>
+        <div class="grid4" style="margin-top:12px">
+          <div><label>Dias de trabalho por semana — padrão (5 = 5x2, 6 = 6x1)</label><input type="number" min="1" max="7" data-rper="${pi}|workDays" value="${p.workDays}"></div>
+          <div><label>Horas semanais</label><input type="number" min="0" data-rper="${pi}|weeklyHours" value="${p.weeklyHours}"></div>
+          <div><label>Descanso mínimo entre jornadas (h)</label><input type="number" min="0" data-rper="${pi}|minRest" value="${p.minRest}"></div>
+        </div>
+      </div>`).join("")}
+      <div class="actions"><button class="secondary small" id="rperAdd">+ Novo período de regras (copia o último)</button></div>
+    </div>`;
+  }
+  function onRulesChange(t) {
+    const R = cfg.rules;
+    if (t.id === "rulesEnabled") { R.enabled = t.checked; saveConfig(t.checked ? "Escala automática ligada" : "Escala automática desligada"); renderConfig(); return true; }
+    if (t.dataset.remp) { const [i, f] = t.dataset.remp.split("|"); cfg.hr.employees[+i][f] = t.type === "checkbox" ? t.checked : (f === "prefDay" || f === "workDays" || f === "weeklyHours") ? (t.value === "" ? "" : +t.value) : t.value; saveConfig("Regra atualizada"); if (f === "plantao") renderConfig(); return true; }
+    if (t.dataset.rpl) { (R.plantao ||= {})[t.dataset.rpl] = t.value; saveConfig("Plantão atualizado"); return true; }
+    if (t.dataset.rcov) { const [pi, k, ci, f] = t.dataset.rcov.split("|"); R.periods[+pi][k][+ci][f] = f === "count" ? +t.value : t.value; saveConfig("Cobertura atualizada"); return true; }
+    if (t.dataset.rcompday) { const [pi, d] = t.dataset.rcompday.split("|").map(Number); const c = R.periods[pi].comp; c.days = t.checked ? [...new Set(c.days.concat(d))].sort() : c.days.filter(x => x !== d); saveConfig("Regra atualizada"); return true; }
+    if (t.dataset.rper) {
+      const [pi, path] = t.dataset.rper.split("|"); const p = R.periods[+pi];
+      const v = t.type === "checkbox" ? t.checked : t.type === "number" ? +t.value : t.value;
+      const ks = path.split("."); let o = p; ks.slice(0, -1).forEach(k => o = o[k]); o[ks[ks.length - 1]] = v;
+      saveConfig("Regra atualizada"); if (path === "start") renderConfig(); return true;
+    }
+    return false;
+  }
+  function onRulesInput(t) {
+    if (t.id === "rulesNotes") { cfg.rules.notes = t.value; saveConfig(false, true); return true; }
+    return false;
+  }
+  function onRulesClick(t) {
+    const R = cfg.rules;
+    if (t.id === "addPersonRules") { $("addPerson").click(); return true; }
+    if (t.id === "delPersonRules") { $("delPerson").click(); return true; }
+    if (t.dataset.rcovadd) { const [pi, k] = t.dataset.rcovadd.split("|"); R.periods[+pi][k].push({ code: "", count: 1 }); saveConfig("Turno adicionado"); renderConfig(); return true; }
+    if (t.dataset.rcovdel) { const [pi, k, ci] = t.dataset.rcovdel.split("|"); R.periods[+pi][k].splice(+ci, 1); saveConfig("Turno removido"); renderConfig(); return true; }
+    if (t.id === "rperAdd") { const last = clone([...R.periods].sort((a, b) => a.start.localeCompare(b.start)).pop()); last.name = "Novo período"; last.start = iso(addDays(parse(last.start), 31)); R.periods.push(last); saveConfig("Período criado"); renderConfig(); return true; }
+    if (t.dataset.rperdel !== undefined) { if (confirm("Remover este período de regras?")) { R.periods.splice(+t.dataset.rperdel, 1); saveConfig("Período removido"); renderConfig(); } return true; }
+    return false;
+  }
+
+  // ================= SOBREAVISO E ACIONAMENTOS =================
+  // Sobreaviso = horas do dia fora do horário de funcionamento do NOC, para quem é o plantonista da semana.
+  // Acionamento = tempo entre o início e o fim de cada chamado atendido no sobreaviso.
+  const SB_DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+  function defaultSB() {
+    const wk = (wd, sat, sun) => ({ 0: sun, 1: wd, 2: wd, 3: wd, 4: wd, 5: wd, 6: sat });
+    return {
+      holiday24: true,
+      periods: [{ name: "Horário atual", start: "2026-01-01",
+        normal: wk("08:00-24:00", "12:00-16:00", ""),
+        ferias: wk("13:00-24:00", "12:00-16:00", "") }],
+      acion: []
+    };
+  }
+  const SB_NORMAL = { 0: "24:00", 1: "8:00", 2: "8:00", 3: "8:00", 4: "8:00", 5: "8:00", 6: "20:00" };
+  const SB_FERIAS = { 0: "24:00", 1: "13:00", 2: "13:00", 3: "13:00", 4: "13:00", 5: "13:00", 6: "20:00" };
+  function sbData() {
+    const S = (cfg.hr.sobreaviso ||= defaultSB());
+    if (!S.monthMode) S.monthMode = "semana";
+    S.periods.forEach(p => { if (!p.normalH) p.normalH = Object.assign({}, SB_NORMAL); if (!p.feriasH) p.feriasH = Object.assign({}, SB_FERIAS); });
+    return S;
+  }
+  // "8", "8:00", "20:30" -> minutos
+  const hm = t => { const m = String(t || "").trim().match(/^(\d{1,2})(?:[:h](\d{2}))?$/); return m ? Math.min(1440, +m[1] * 60 + (+m[2] || 0)) : 0; };
+  const sbState = { editId: null };
+  const toMin = t => { const m = String(t).trim().match(/^(\d{1,2})(?::(\d{2}))?$/); return m ? Math.min(1440, +m[1] * 60 + (+m[2] || 0)) : null; };
+  const fmtHM = min => { const s = min < 0 ? "-" : ""; min = Math.abs(Math.round(min)); return `${s}${Math.floor(min / 60)}:${pad(min % 60)}`; };
+  // "08:00-12:00, 13:00-24:00" -> minutos de funcionamento no dia (sem contar sobreposição)
+  function opMinutes(txt) {
+    const iv = String(txt || "").split(/[,;]/).map(p => p.split("-").map(toMin)).filter(p => p.length === 2 && p[0] !== null && p[1] !== null)
+      .map(([a, b]) => b > a ? [a, b] : [a, 1440]).sort((x, y) => x[0] - y[0]);
+    let tot = 0, cur = null;
+    iv.forEach(([a, b]) => { if (!cur || a > cur[1]) { if (cur) tot += cur[1] - cur[0]; cur = [a, b]; } else cur[1] = Math.max(cur[1], b); });
+    if (cur) tot += cur[1] - cur[0];
+    return tot;
+  }
+  function sbPeriodFor(d) {
+    const key = iso(d), ps = [...sbData().periods].sort((a, b) => a.start.localeCompare(b.start));
+    let p = ps[0]; ps.forEach(x => { if (x.start <= key) p = x; });
+    return p;
+  }
+  // Sobreaviso de um dia: quem é o plantonista e quantos minutos
+  function sbDay(d) {
+    const w = week(mondayOf(d));
+    const who = w.oncall.map(x => x.person).filter((v, i, a) => a.indexOf(v) === i);
+    const hol = holidayOf(d), P = sbPeriodFor(d);
+    const mode = w.onVac.length ? "ferias" : "normal";
+    let min, kind;
+    const S = sbData(), base = hm(P[mode + "H"][d.getDay()]);
+    const hmode = S.holidayMode || (S.holiday24 === false ? "none" : "replace");
+    min = base; kind = mode === "ferias" ? "Escala de férias" : "Normal";
+    if (hol && hmode !== "none") { min = hmode === "add" ? base + 1440 : Math.max(base, 1440); kind = "Feriado (" + hol.name + ")"; }
+    return { d, who, min, kind, hol: !!(hol && hmode !== "none") };
+  }
+  const acDur = a => { const s = toMin(a.start), e = toMin(a.end); if (s === null || e === null) return 0; return e > s ? e - s : e + 1440 - s; };
+  // Dias considerados no mês: "semana" = semanas inteiras (seg a dom) cujo sábado cai no mês, como na planilha;
+  // "dia" = só os dias do mês no calendário.
+  function sbRange() {
+    if (sbData().monthMode === "dia") return monthDays();
+    const out = [];
+    let sat = new Date(state.year, state.month, 1, 12);
+    while (sat.getDay() !== 6) sat = addDays(sat, 1);
+    for (; sat.getMonth() === state.month; sat = addDays(sat, 7)) for (let i = -5; i <= 1; i++) out.push(addDays(sat, i));
+    return out;
+  }
+  function sbMonth() {
+    const days = sbRange();
+    const per = {};   // pessoa -> {sb, weeks:Set, hol, n, ac}
+    const row = p => per[p] ||= { sb: 0, weeks: new Set(), hol: 0, n: 0, ac: 0 };
+    const detail = days.map(sbDay);
+    detail.forEach(x => x.who.forEach(p => { row(p).sb += x.min; row(p).weeks.add(iso(mondayOf(x.d))); if (x.hol) row(p).hol++; }));
+    const pre = `${state.year}-${pad(state.month + 1)}-`;
+    const acs = sbData().acion.filter(a => sbState.acAll || a.date.startsWith(pre)).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    acs.filter(a => a.date.startsWith(pre)).forEach(a => { row(a.person).n++; row(a.person).ac += acDur(a); });
+    return { days, detail, per, acs };
+  }
+
+  function renderSB() {
+    const box = $("sbPanel"); if (!box) return;
+    if (!perm.rh) { box.innerHTML = ""; return; }
+    $("sbMonth").innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(state.year, m)}</option>`).join("");
+    const S = sbData(), M = sbMonth();
+    const people = Object.keys(M.per).map(Number).sort((a, b) => pname(a).localeCompare(pname(b)));
+    const tot = people.reduce((t, p) => ({ sb: t.sb + M.per[p].sb, n: t.n + M.per[p].n, ac: t.ac + M.per[p].ac }), { sb: 0, n: 0, ac: 0 });
+    const editing = S.acion.find(a => a.id === sbState.editId);
+    const defDate = editing ? editing.date : iso(today.getFullYear() === state.year && today.getMonth() === state.month ? today : new Date(state.year, state.month, 1, 12));
+    const defWho = editing ? editing.person : (sbDay(parse(defDate)).who[0] ?? 0);
+    box.innerHTML = `
+      <div class="panel">
+        <h2>Resumo de ${monthName(state.year, state.month)} de ${state.year}</h2>
+        <p class="lead">Sobreaviso: horas de sobreaviso de cada dia em que a pessoa é a plantonista (pela escala de plantões)${S.monthMode === "dia" ? ", contando só os dias deste mês" : `, contando as semanas inteiras (segunda a domingo) cujo sábado cai neste mês: ${dm(M.days[0])} a ${dm(M.days[M.days.length - 1])}`}. Acionamento: soma do tempo dos chamados deste mês.</p>
+        <div class="hr-scroll"><table class="hrsum sbsum"><thead><tr><th class="nm">Colaborador</th><th>Semanas de plantão</th><th>Feriados</th><th>Horas de sobreaviso</th><th>Acionamentos</th><th>Tempo de acionamento</th></tr></thead><tbody>
+          ${people.length ? people.map(p => `<tr><td class="nm">${esc(pname(p))}</td><td>${M.per[p].weeks.size}</td><td>${M.per[p].hol || "—"}</td><td><b>${fmtHM(M.per[p].sb)}</b></td><td>${M.per[p].n}</td><td><b>${fmtHM(M.per[p].ac)}</b></td></tr>`).join("")
+            : `<tr><td colspan="6" class="note">Ninguém de plantão neste mês.</td></tr>`}
+          <tr class="sbtot"><td class="nm">Total</td><td></td><td></td><td>${fmtHM(tot.sb)}</td><td>${tot.n}</td><td>${fmtHM(tot.ac)}</td></tr>
+        </tbody></table></div>
+        <div class="actions no-print">
+          <select id="sbMode" style="width:auto"><option value="semana" ${S.monthMode !== "dia" ? "selected" : ""}>Contar semanas inteiras (pelo sábado do mês)</option><option value="dia" ${S.monthMode === "dia" ? "selected" : ""}>Contar só os dias do mês</option></select>
+          <button class="primary small" id="sbCopy">Copiar resumo</button>
+          <button class="secondary small" id="sbCsv">Baixar CSV (resumo e acionamentos)</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Acionamentos</h2>
+        <p class="lead">Lance cada chamado do grupo REGISTRO - CHAMADOS SOBREAVISO. Ao escolher a data, o colaborador já vem preenchido com o plantonista daquele dia. Se o fim for menor que o início, conta como virada da meia-noite. Os acionamentos entram no mês da data deles.</p>
+        <div class="grid4 sbform">
+          <div><label>Data</label><input type="date" id="acDate" value="${defDate}"></div>
+          <div><label>Colaborador</label><select id="acWho">${personOptions(defWho)}</select></div>
+          <div><label>Início</label><input type="time" id="acStart" value="${editing ? editing.start : ""}"></div>
+          <div><label>Fim</label><input type="time" id="acEnd" value="${editing ? editing.end : ""}"></div>
+        </div>
+        <div style="margin-top:10px"><label>Descrição da atividade</label><textarea id="acDesc" rows="2" placeholder="ex.: Acionado pelo André para acompanhar a instalação de um AP...">${esc(editing ? editing.desc || "" : "")}</textarea></div>
+        <div class="actions">
+          <button class="primary small" id="acSave">${editing ? "Salvar alteração" : "Adicionar acionamento"}</button>
+          ${editing ? `<button class="secondary small" id="acCancel">Cancelar edição</button>` : ""}
+          <span class="note" id="acPreview"></span>
+        </div>
+        <label class="check" style="margin-top:14px"><input type="checkbox" id="acAll" ${sbState.acAll ? "checked" : ""}> Mostrar acionamentos de todos os meses (sem marcar, a lista mostra só ${monthName(state.year, state.month)})</label>
+        <div class="hr-scroll" style="margin-top:8px"><table class="hrsum sbacs"><thead><tr><th>Data</th><th>Colaborador</th><th>Início</th><th>Fim</th><th>Duração</th><th class="nm">Descrição</th><th></th></tr></thead><tbody>
+          ${M.acs.length ? M.acs.map(a => `<tr><td>${sbState.acAll ? parse(a.date).toLocaleDateString("pt-BR") : dm(parse(a.date))}</td><td>${esc(pname(a.person))}</td><td>${esc(a.start)}</td><td>${esc(a.end)}</td><td><b>${fmtHM(acDur(a))}</b></td>
+            <td class="nm desc">${esc(a.desc || "")}</td><td style="white-space:nowrap"><button class="secondary small" data-acedit="${a.id}">Editar</button> <button class="danger small" data-acdel="${a.id}">×</button></td></tr>`).join("")
+            : `<tr><td colspan="7" class="note">Nenhum acionamento ${sbState.acAll ? "lançado" : "lançado neste mês"}.</td></tr>`}
+        </tbody></table></div>
+      </div>
+
+      <details class="panel" id="sbDetail" ${sbState.detailOpen ? "open" : ""}>
+        <summary><h2 style="display:inline">Sobreaviso dia a dia</h2></summary>
+        <div class="hr-scroll" style="margin-top:12px"><table class="hrsum"><thead><tr><th>Data</th><th>Dia</th><th>Plantonista</th><th>Tipo</th><th>Horas de sobreaviso</th></tr></thead><tbody>
+          ${M.detail.map(x => `<tr class="${x.d.getDay() % 6 === 0 || holidayOf(x.d) ? "sbwe" : ""}"><td>${dm(x.d)}</td><td>${SB_DAYS[x.d.getDay()]}</td><td>${x.who.map(p => esc(pname(p))).join(", ") || "—"}</td><td>${esc(x.kind)}</td><td>${fmtHM(x.min)}</td></tr>`).join("")}
+        </tbody></table></div>
+      </details>
+
+      <details class="panel" id="sbHours" ${sbState.hoursOpen ? "open" : ""}>
+        <summary><h2 style="display:inline">Horas de sobreaviso por dia</h2></summary>
+        <p class="lead" style="margin-top:8px">Quantas horas de sobreaviso cada dia vale para o plantonista (o tempo fora do horário de funcionamento do NOC). A coluna “com férias” vale nas semanas em que alguém do plantão está de férias. Crie um período novo quando o horário mudar (ex.: dezembro).</p>
+        <div class="grid3"><div><label>Feriado</label><select id="sbHolMode">
+          <option value="replace" ${(S.holidayMode || "replace") === "replace" ? "selected" : ""}>Vale 24h no lugar das horas do dia (ex.: segunda 8h → 24h)</option>
+          <option value="add" ${S.holidayMode === "add" ? "selected" : ""}>Soma 24h às horas do dia (ex.: segunda 8h + 24h)</option>
+          <option value="none" ${S.holidayMode === "none" ? "selected" : ""}>Não muda nada</option></select></div></div>
+        ${[...S.periods].map((p, i) => [p, i]).sort((a, b) => a[0].start.localeCompare(b[0].start)).map(([p, pi]) => `<div class="regime" style="margin-top:12px">
+          <div class="grid3">
+            <div><label>Nome do período</label><input data-sbper="${pi}|name" value="${esc(p.name)}"></div>
+            <div><label>Vale a partir de</label><input type="date" data-sbper="${pi}|start" value="${p.start}"></div>
+            <div style="display:flex;align-items:flex-end;justify-content:flex-end">${S.periods.length > 1 ? `<button class="danger small" data-sbdelper="${pi}">Remover período</button>` : ""}</div>
+          </div>
+          <div class="hr-scroll"><table class="tpl sbhours"><thead><tr><th>Dia</th><th>Horas de sobreaviso (normal)</th><th>Horas de sobreaviso (com férias)</th></tr></thead><tbody>
+            ${[1, 2, 3, 4, 5, 6, 0].map(d => `<tr><td class="nm">${SB_DAYS[d]}</td>
+              <td><input data-sbh="${pi}|normalH|${d}" value="${esc(p.normalH[d] || "")}" placeholder="0:00"></td>
+              <td><input data-sbh="${pi}|feriasH|${d}" value="${esc(p.feriasH[d] || "")}" placeholder="0:00"></td></tr>`).join("")}
+            <tr class="sbtot"><td class="nm">Total da semana</td><td>${fmtHM([0, 1, 2, 3, 4, 5, 6].reduce((t, d) => t + hm(p.normalH[d]), 0))}</td><td>${fmtHM([0, 1, 2, 3, 4, 5, 6].reduce((t, d) => t + hm(p.feriasH[d]), 0))}</td></tr>
+          </tbody></table></div>
+        </div>`).join("")}
+        <div class="actions"><button class="secondary small" id="sbAddPer">+ Novo período (copia o último)</button></div>
+      </details>`;
+    sbPreview();
+  }
+  function sbPreview() {
+    const el = $("acPreview"); if (!el) return;
+    const a = { start: $("acStart").value, end: $("acEnd").value };
+    el.textContent = a.start && a.end ? "Duração: " + fmtHM(acDur(a)) : "";
+  }
+  function sbRows() {
+    const M = sbMonth();
+    const people = Object.keys(M.per).map(Number).sort((a, b) => pname(a).localeCompare(pname(b)));
+    return { M, people };
+  }
+  function onSBClick(e) {
+    const t = e.target.closest("button"); if (!t) return;
+    const S = sbData();
+    if (t.id === "acSave") {
+      const a = { date: $("acDate").value, person: +$("acWho").value, start: $("acStart").value, end: $("acEnd").value, desc: $("acDesc").value.trim() };
+      if (!a.date || !a.start || !a.end) return toast("Preencha data, início e fim");
+      if (a.start === a.end) return toast("O início e o fim são iguais");
+      if (sbState.editId) Object.assign(S.acion.find(x => x.id === sbState.editId), a);
+      else S.acion.push(Object.assign({ id: "a" + Date.now().toString(36), by: user }, a));
+      const d = parse(a.date); state.year = YEARS.includes(d.getFullYear()) ? d.getFullYear() : state.year; state.month = d.getMonth();
+      saveConfig(sbState.editId ? "Acionamento alterado" : "Acionamento adicionado"); sbState.editId = null; renderViews(); return;
+    }
+    if (t.id === "acCancel") { sbState.editId = null; renderSB(); return; }
+    if (t.dataset.acedit) { sbState.editId = t.dataset.acedit; renderSB(); $("acStart").focus(); return; }
+    if (t.dataset.acdel) { if (confirm("Excluir este acionamento?")) { S.acion = S.acion.filter(x => x.id !== t.dataset.acdel); saveConfig("Acionamento excluído"); } return; }
+    if (t.id === "sbAddPer") {
+      const last = clone([...S.periods].sort((a, b) => a.start.localeCompare(b.start)).pop());
+      last.name = "Novo período"; last.start = iso(addDays(parse(last.start), 31));
+      S.periods.push(last); sbState.hoursOpen = true; saveConfig("Período criado"); return;
+    }
+    if (t.dataset.sbdelper !== undefined) { if (confirm("Remover este período?")) { S.periods.splice(+t.dataset.sbdelper, 1); saveConfig("Período removido"); } return; }
+    if (t.id === "sbCopy" || t.id === "sbCsv") {
+      const { M, people } = sbRows();
+      const rows = [["Colaborador", "Semanas de plantão", "Horas de sobreaviso", "Acionamentos", "Tempo de acionamento"]]
+        .concat(people.map(p => [pname(p), M.per[p].weeks.size, fmtHM(M.per[p].sb), M.per[p].n, fmtHM(M.per[p].ac)]));
+      if (t.id === "sbCopy") { copyText(rows.map(r => r.join("\t")).join("\r\n")).then(ok => toast(ok ? "Resumo copiado" : "Não consegui copiar — use o CSV")); return; }
+      const all = rows.concat([[], ["Data", "Colaborador", "Início", "Fim", "Duração", "Descrição"]])
+        .concat(M.acs.map(a => [parse(a.date).toLocaleDateString("pt-BR"), pname(a.person), a.start, a.end, fmtHM(acDur(a)), a.desc || ""]));
+      const csv = "﻿" + all.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+      download(`sobreaviso-${slug()}-${state.year}-${pad(state.month + 1)}.csv`, csv, "text/csv;charset=utf-8;");
+    }
+  }
+  function onSBChange(e) {
+    const t = e.target, S = sbData();
+    if (t.id === "acDate" && t.value && !sbState.editId) { const w = sbDay(parse(t.value)).who[0]; if (w !== undefined) $("acWho").value = w; return; }
+    if (t.id === "acStart" || t.id === "acEnd") return sbPreview();
+    if (t.id === "sbMode") { S.monthMode = t.value; return saveConfig("Atualizado"); }
+    if (t.id === "acAll") { sbState.acAll = t.checked; return renderSB(); }
+    if (t.id === "sbHolMode") { S.holidayMode = t.value; sbState.hoursOpen = true; return saveConfig("Atualizado"); }
+    if (t.dataset.sbh) { const [pi, mode, d] = t.dataset.sbh.split("|"); S.periods[+pi][mode][d] = t.value.trim(); sbState.hoursOpen = true; return saveConfig("Horário atualizado"); }
+    if (t.dataset.sbper) { const [pi, f] = t.dataset.sbper.split("|"); S.periods[+pi][f] = t.value; sbState.hoursOpen = true; return saveConfig("Período atualizado"); }
   }
 
   // ---------- Login ----------
@@ -1273,33 +2302,57 @@
     $("userbox").innerHTML = user
       ? `<span class="who">👤 ${esc(user)}</span><button class="ghost small" id="logoutBtn">Sair</button>`
       : `<button class="ghost small" id="loginBtn">Entrar</button>`;
-    $("tabConfigBtn").classList.toggle("hidden", !user);
-    $("tabRhBtn").classList.toggle("hidden", !user);
-    if (!user && (state.tab === "config" || state.tab === "rh")) setTab("painel");
+    $("tabConfigBtn").classList.toggle("hidden", !perm.edit);
+    $("tabRhBtn").classList.toggle("hidden", !perm.rh);
+    $("tabSbBtn").classList.toggle("hidden", !perm.rh);
+    if ((!perm.edit && state.tab === "config") || (!perm.rh && (state.tab === "rh" || state.tab === "sobre"))) setTab("painel");
   }
   $("userbox").addEventListener("click", e => {
-    if (e.target.id === "loginBtn") { $("loginModal").classList.remove("hidden"); $("lgErr").textContent = ""; $("lgUser").focus(); }
+    if (e.target.id === "loginBtn") {
+      const first = SRV_ON ? srv.first : (!FB_ON && !localUsers.length);
+      $("lgTitle").textContent = first ? "Primeiro acesso" : "Entrar";
+      $("lgFirst").classList.toggle("hidden", !first);
+      $("lgPass2Box").classList.toggle("hidden", !first);
+      $("lgSubmit").textContent = first ? "Criar e entrar" : "Entrar";
+      $("loginModal").classList.remove("hidden"); $("lgErr").textContent = ""; $("lgUser").focus();
+    }
     if (e.target.id === "logoutBtn") {
       if (fb) { fb.signOut(); toast("Você saiu"); return; }
-      user = null; try { sessionStorage.removeItem(SESSION_KEY); } catch (x) {} renderUser(); renderViews(); renderConfig(); toast("Você saiu");
+      if (SRV_ON) { api("sair", {}).catch(() => {}); applySession(null); srv.users = []; renderUser(); renderViews(); renderConfig(); toast("Você saiu"); return; }
+      user = null; perm = { master: false, edit: false, rh: false }; try { sessionStorage.removeItem(SESSION_KEY); } catch (x) {} renderUser(); renderViews(); renderConfig(); toast("Você saiu");
     }
   });
   $("lgCancel").addEventListener("click", () => $("loginModal").classList.add("hidden"));
   function setShow(on) {
-    $("lgPass").type = on ? "text" : "password";
+    $("lgPass").type = on ? "text" : "password"; $("lgPass2").type = on ? "text" : "password";
     $("lgShow").checked = on; $("lgEye").classList.toggle("on", on);
     $("lgEye").title = on ? "Ocultar senha" : "Mostrar senha";
   }
   $("lgShow").addEventListener("change", e => setShow(e.target.checked));
   $("lgEye").addEventListener("click", () => setShow($("lgPass").type === "password"));
-  ["lgUser", "lgPass"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doLogin(); } }));
+  ["lgUser", "lgPass", "lgPass2"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doLogin(); } }));
   $("lgSubmit").addEventListener("click", doLogin);
   async function doLogin() {
     const u = $("lgUser").value.trim().toLowerCase(), p = $("lgPass").value.trim();
+    if (SRV_ON) {
+      try {
+        $("lgErr").textContent = "Entrando…";
+        let j;
+        if (srv.first) {
+          if (p !== $("lgPass2").value.trim()) { $("lgErr").textContent = "As senhas não conferem."; return; }
+          j = await api("primeiro", { user: u, pass: p }); srv.first = false;
+        } else j = await api("entrar", { user: u, pass: p });
+        applySession(j.sessao);
+        if (perm.master) await loadSrvUsers();
+        $("loginModal").classList.add("hidden"); $("lgPass").value = ""; $("lgPass2").value = ""; $("lgErr").textContent = "";
+        setShow(false); renderUser(); renderViews(); renderConfig(); setTab("config"); toast("Bem-vindo(a), " + user);
+        if (!srv.versao) { srv.lastSent = ""; pushServer(); }   // primeiro uso: envia a escala deste navegador para o servidor
+      } catch (e) { $("lgErr").textContent = e.message; }
+      return;
+    }
     if (FB_ON) {
       if (!fb) { $("lgErr").textContent = "Conectando ao Firebase, tente de novo em instantes."; return; }
-      const email = u.includes("@") ? u : USER_EMAILS[u];
-      if (!email) { $("lgErr").textContent = "Usuário ou senha incorretos."; return; }
+      const email = emailFor(u);
       $("lgErr").textContent = "Entrando…";
       try {
         await fb.signIn(email, p);
@@ -1310,8 +2363,18 @@
       }
       return;
     }
-    if (USERS[u] && USERS[u] === sha256(u + ":" + p)) {
-      user = u; try { sessionStorage.setItem(SESSION_KEY, u); } catch (x) {}
+    if (!localUsers.length) {
+      // Primeiro acesso: cria o administrador
+      const p2 = $("lgPass2").value.trim();
+      if (!/^[a-z0-9._-]{3,30}$/.test(u)) { $("lgErr").textContent = "Usuário: 3 a 30 letras minúsculas ou números, sem espaço e sem acento."; return; }
+      if (p.length < 6) { $("lgErr").textContent = "A senha precisa ter pelo menos 6 caracteres."; return; }
+      if (p !== p2) { $("lgErr").textContent = "As senhas não conferem."; return; }
+      localUsers = [{ user: u, hash: sha256(u + ":" + p), master: true, rh: true, createdBy: u, createdAt: Date.now() }];
+      saveLocalUsers(localUsers);
+    }
+    const lu = localUsers.find(x => x.user === u);
+    if (lu && lu.hash === sha256(u + ":" + p)) {
+      user = u; perm = localPerm(u); try { sessionStorage.setItem(SESSION_KEY, u); } catch (x) {}
       $("loginModal").classList.add("hidden"); $("lgPass").value = "";
       renderUser(); renderViews(); renderConfig(); setTab("config"); toast("Bem-vindo(a), " + u);
       setShow(false);
@@ -1328,9 +2391,22 @@
   function setTab(tab) {
     state.tab = tab;
     document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-    ["painel", "calendario", "rh", "config"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab));
+    ["painel", "calendario", "rh", "sobre", "config"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab));
   }
-  function renderViews() { yearButtons(); renderNow(); renderYear(); renderCalendar(); renderHR(); }
+  const slug = () => sectorName().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "setor";
+  const sectorName = () => (cfg.sector || "").trim() || "Setor";
+  function renderSector() {
+    const n = sectorName();
+    $("pageTitle").textContent = "Escala de Plantões — " + n;
+    document.title = "Escala de Plantões — " + n;
+    document.querySelectorAll(".sectorName").forEach(e => e.textContent = n);
+  }
+  function renderUI() {
+    $("tabCalBtn").classList.toggle("hidden", !cfg.ui.calendar);
+    $("forecastPanel").classList.toggle("hidden", !cfg.ui.forecast);
+    if (!cfg.ui.calendar && state.tab === "calendario") setTab("painel");
+  }
+  function renderViews() { renderUI(); renderSector(); yearButtons(); renderNow(); renderYear(); renderCalendar(); renderHR(); renderSB(); }
 
   // ---------- Eventos ----------
   document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setTab(b.dataset.tab); });
@@ -1358,6 +2434,23 @@
   $("hrPanel").addEventListener("toggle", e => { if (e.target.id === "hrCfgDetails") hrState.cfgOpen = e.target.open; }, true);
   $("hrPanel").addEventListener("focusout", e => { if (e.target.classList.contains("cellsel")) setTimeout(() => { if (hrState.editCell) { hrState.editCell = null; renderHR(); } }, 150); });
   $("hrMonth").addEventListener("change", e => { state.month = +e.target.value; renderViews(); });
+  $("sbMonth").addEventListener("change", e => { state.month = +e.target.value; renderViews(); });
+  $("sbPrev").addEventListener("click", () => $("calPrev").click());
+  $("sbNext").addEventListener("click", () => $("calNext").click());
+  $("sbPanel").addEventListener("click", onSBClick);
+  $("sbPanel").addEventListener("change", onSBChange);
+  $("sbPanel").addEventListener("input", e => { if (e.target.id === "acStart" || e.target.id === "acEnd") sbPreview(); });
+  $("sbPanel").addEventListener("toggle", e => { if (e.target.id === "sbDetail") sbState.detailOpen = e.target.open; if (e.target.id === "sbHours") sbState.hoursOpen = e.target.open; }, true);
+  document.addEventListener("keydown", e => {
+    if (state.tab !== "rh" || !hrState.sel.size || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    if (e.key === "Escape") { hrState.sel.clear(); renderHR(); }
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      hrState.sel.forEach(k => { const [id, d] = k.split("|"); if (cfg.hr.overrides[id]) delete cfg.hr.overrides[id][d]; });
+      saveConfig("Células voltaram ao automático");
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); $("hrSelAll").click(); }
+  });
   $("hrPrev").addEventListener("click", () => $("calPrev").click());
   $("hrNext").addEventListener("click", () => $("calNext").click());
   $("printBtn").addEventListener("click", () => window.print());
@@ -1369,11 +2462,11 @@
       w.sunH ? (x.slot.oncall ? "Feriado - plantão o dia todo" : "Feriado") : (x.slot.sun || "-"),
       x.slot.oncall ? "Sim" : "Não", [w.satH, w.sunH].filter(Boolean).map(h => h.name).join(" / ") || "-", w.onVac.map(pname).join(", ") || "-", w.overridden ? "Sim" : "Não"])));
     const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
-    download(`escala-plantoes-noc-${state.year}.csv`, csv, "text/csv;charset=utf-8;");
+    download(`escala-plantoes-${slug()}-${state.year}.csv`, csv, "text/csv;charset=utf-8;");
   });
 
   renderUser(); renderViews(); renderConfig();
-  if (FB_ON) initFirebase(); else setSync("local");
+  if (FB_ON) initFirebase(); else if (SRV_ON) initServer(); else setSync("local");
 })();
 </script>
 </body>
