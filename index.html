@@ -595,7 +595,12 @@
           await authM.createUserWithEmailAndPassword(sa, email, pass);
           await authM.signOut(sa);
         },
-        saveUsers: list => fsM.setDoc(fsM.doc(db, "escala", "usuarios"), { list, emails: list.map(x => x.email), rhEmails: list.filter(x => x.rh).map(x => x.email), updatedBy: user, updatedAt: fsM.serverTimestamp() }),
+        saveUsers: list => fsM.setDoc(fsM.doc(db, "escala", "usuarios"), { list, emails: list.map(x => x.email), rhEmails: list.filter(x => x.rh).map(x => x.email),
+          editorEmails: list.filter(x => (x.role || "editor") === "editor").map(x => x.email), updatedBy: user, updatedAt: fsM.serverTimestamp() }),
+        sbRef: fsM.doc(db, "escala", "sobreaviso"),
+        saveSb: data => fsM.setDoc(fsM.doc(db, "escala", "sobreaviso"), { data, updatedBy: user, updatedAt: fsM.serverTimestamp() }),
+        acSet: (id, obj) => fsM.setDoc(fsM.doc(db, "acionamentos", id), obj),
+        acDel: id => fsM.deleteDoc(fsM.doc(db, "acionamentos", id)),
         updatePassword: p => authM.updatePassword(auth.currentUser, p) };
       const startRh = () => {
         if (rhUnsub) return;
@@ -606,29 +611,48 @@
           if (!data || data === lastSyncedRh) return;
           lastSyncedRh = data;
           try { cfg.hr = JSON.parse(data); } catch (e) { return; }
+          maybeMigrateSb();
           if (!(document.activeElement && $("hrPanel").contains(document.activeElement) && document.activeElement.tagName === "INPUT")) renderHR();
         }, e => setSync("error", e.code || e.message));
       };
       const stopRh = () => { if (rhUnsub) { rhUnsub(); rhUnsub = null; } rhLoaded = false; };
+      let sbUnsub = [];
+      const sbErr = e => console.warn("sobreaviso", e.code || e.message);
+      const startSb = () => {
+        if (sbUnsub.length) return;
+        sbUnsub.push(fsM.onSnapshot(fb.sbRef, snap => {
+          sbStore.cfgLoaded = true; sbStore.cfgExists = snap.exists();
+          if (snap.exists()) { try { sbStore.cfg = JSON.parse(snap.data().data); } catch (e) {} }
+          maybeMigrateSb(); renderSB();
+        }, sbErr));
+        sbUnsub.push(fsM.onSnapshot(fsM.collection(db, "acionamentos"), qs => {
+          sbStore.acion = qs.docs.map(d => Object.assign({}, d.data(), { id: d.id })); sbStore.acLoaded = true;
+          maybeMigrateSb();
+          if (!(document.activeElement && $("sbPanel").contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName))) renderSB();
+        }, sbErr));
+      };
+      const stopSb = () => { sbUnsub.forEach(f => f()); sbUnsub = []; Object.assign(sbStore, { cfg: null, acion: [], cfgLoaded: false, cfgExists: false, acLoaded: false }); };
       authM.onAuthStateChanged(auth, u => {
         userEmail = u ? u.email.toLowerCase() : "";
         user = u ? userEmail.split("@")[0] : null;
-        stopRh();
+        stopRh(); stopSb();
         if (usersUnsub) { usersUnsub(); usersUnsub = null; }
         access.list = []; access.loaded = false;
         const master = !!u && MASTERS.includes(userEmail);
-        perm = { master, edit: master, rh: master };
-        if (master) startRh();
+        perm = { master, edit: master, rh: master, sb: master, sbAdmin: master };
+        if (master) { startRh(); startSb(); }
         if (u) usersUnsub = fsM.onSnapshot(fb.usersRef, snap => {
           access.list = snap.exists() ? (snap.data().list || []) : [];
           access.loaded = true;
           if (!master) {
             const me = access.list.find(x => x.email === userEmail);
             if (!me) { toast("Este usuário não tem permissão de acesso"); fb.signOut(); return; }
-            perm = { master: false, edit: true, rh: !!me.rh };
+            const role = me.role || "editor";
+            perm = { master: false, edit: role === "editor", rh: !!me.rh, sb: true, sbAdmin: false };
             if (perm.rh) startRh(); else stopRh();
+            startSb();
           }
-          renderUser(); renderConfig(); renderHR();
+          renderUser(); renderConfig(); renderHR(); renderSB();
         }, () => { if (!master) { toast("Este usuário não tem permissão de acesso"); fb.signOut(); } });
         renderUser(); renderViews(); renderConfig();
       });
@@ -1010,15 +1034,18 @@
     if (!perm.master) return mine;
     return `<div class="sect users" style="border:0;margin-top:0;padding-top:0">
         <h3>Usuários com acesso</h3>
-        <p class="lead note">Fixos: ${MASTERS.map(m => `<b>${esc(m.split("@")[0])}</b>`).join(", ")} (podem criar e remover usuários). Os usuários criados aqui entram só com o nome e a senha e podem configurar a escala; marque “Escala RH” para liberar também essa aba.</p>
+        <p class="lead note">Administração (fixos): ${MASTERS.map(m => `<b>${esc(m.split("@")[0])}</b>`).join(", ")} — fazem tudo, inclusive criar e remover usuários e corrigir acionamentos. Os usuários criados aqui entram só com o nome e a senha:
+          <b>Operador</b> vê Painel, Calendário e Sobreaviso e só pode <b>incluir</b> acionamentos; <b>Editor</b> também configura a escala. Marque “Escala RH” para liberar essa aba.</p>
         ${!access.loaded ? `<p class="note">Carregando usuários…</p>` : access.list.length ? `<ul class="list">${access.list.map((x, i) => `<li>
           <span><b>${esc(x.user)}</b> <span class="note">— criado por ${esc(x.createdBy || "—")}${x.createdAt ? " em " + fmt(x.createdAt) : ""}</span></span>
-          <span style="display:flex;gap:12px;align-items:center"><label class="check" style="margin:0"><input type="checkbox" data-urh="${i}" ${x.rh ? "checked" : ""}> Escala RH</label>
+          <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><select data-urole="${i}" style="width:auto;padding:5px 8px"><option value="operador" ${x.role === "operador" ? "selected" : ""}>Operador</option><option value="editor" ${(x.role || "editor") === "editor" ? "selected" : ""}>Editor</option></select>
+          <label class="check" style="margin:0"><input type="checkbox" data-urh="${i}" ${x.rh ? "checked" : ""}> Escala RH</label>
           <button class="danger small" data-udel="${i}">Remover acesso</button></span></li>`).join("")}</ul>` : `<p class="note">Nenhum usuário adicional.</p>`}
         <div class="grid4" style="margin-top:12px">
           <div><label>Novo usuário</label><input id="nuUser" placeholder="ex.: joao" autocomplete="off"></div>
           <div><label>Senha (mín. 6 caracteres)</label><div class="pwd"><input type="password" id="nuPass" autocomplete="new-password"><button type="button" class="eye" data-eye="nuPass">👁</button></div></div>
-          <div><label class="check"><input type="checkbox" id="nuRh"> Acesso à Escala RH</label></div>
+          <div><label>Perfil</label><select id="nuRole"><option value="operador">Operador (só inclui acionamentos)</option><option value="editor">Editor (configura a escala)</option></select>
+            <label class="check" style="margin-top:6px"><input type="checkbox" id="nuRh"> Acesso à Escala RH</label></div>
           <div style="display:flex;align-items:flex-end"><button class="primary small" id="nuAdd">Criar usuário</button></div>
         </div>
       </div>
@@ -1053,7 +1080,7 @@
         }
       }
       try {
-        await fb.saveUsers(access.list.concat([{ user: u, email, rh, createdBy: user, createdAt: Date.now() }]));
+        await fb.saveUsers(access.list.concat([{ user: u, email, rh, role: $("nuRole") ? $("nuRole").value : "operador", createdBy: user, createdAt: Date.now() }]));
         toast(existed ? `Acesso devolvido a ${u} (a conta já existia, a senha antiga continua valendo)` : `Usuário ${u} criado`);
       } catch (e) { toast("Conta criada, mas não consegui salvar a lista: " + (e.code || e.message)); }
       return true;
@@ -1225,6 +1252,11 @@
       const i = +(t.dataset.lumaster ?? t.dataset.lurh), x = localUsers[i];
       if (t.dataset.lumaster !== undefined) x.master = t.checked; else x.rh = t.checked;
       saveLocalUsers(localUsers); perm = localPerm(user); renderUser(); renderConfig(); renderHR(); toast("Permissão atualizada");
+      return;
+    }
+    if (t.dataset.urole !== undefined && fb) {
+      const list = access.list.map((x, i) => i === +t.dataset.urole ? { ...x, role: t.value } : x);
+      fb.saveUsers(list).then(() => toast("Perfil atualizado")).catch(err => toast("Não foi possível salvar: " + (err.code || err.message)));
       return;
     }
     if (t.dataset.urh !== undefined && fb) {
@@ -2073,8 +2105,14 @@
   }
   const SB_NORMAL = { 0: "24:00", 1: "8:00", 2: "8:00", 3: "8:00", 4: "8:00", 5: "8:00", 6: "20:00" };
   const SB_FERIAS = { 0: "24:00", 1: "13:00", 2: "13:00", 3: "13:00", 4: "13:00", 5: "13:00", 6: "20:00" };
+  // No Firebase, horas e acionamentos ficam fora da Escala RH, para operadores poderem incluir acionamentos
+  const sbStore = { cfg: null, acion: [], cfgLoaded: false, cfgExists: false, acLoaded: false };
+  const canSb = () => perm.sb !== undefined ? perm.sb : perm.rh;
+  const canSbAdmin = () => perm.sbAdmin !== undefined ? perm.sbAdmin : perm.edit;
   function sbData() {
-    const S = (cfg.hr.sobreaviso ||= defaultSB());
+    let S;
+    if (FB_ON) { S = (sbStore.cfg ||= defaultSB()); S.acion = sbStore.acion; }
+    else S = (cfg.hr.sobreaviso ||= defaultSB());
     if (!S.monthMode) S.monthMode = "semana";
     S.periods.forEach(p => { if (!p.normalH) p.normalH = Object.assign({}, SB_NORMAL); if (!p.feriasH) p.feriasH = Object.assign({}, SB_FERIAS); });
     return S;
@@ -2136,7 +2174,8 @@
 
   function renderSB() {
     const box = $("sbPanel"); if (!box) return;
-    if (!perm.rh) { box.innerHTML = ""; return; }
+    if (!canSb()) { box.innerHTML = ""; return; }
+    const admin = canSbAdmin();
     $("sbMonth").innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(state.year, m)}</option>`).join("");
     const S = sbData(), M = sbMonth();
     const people = Object.keys(M.per).map(Number).sort((a, b) => pname(a).localeCompare(pname(b)));
@@ -2154,7 +2193,7 @@
           <tr class="sbtot"><td class="nm">Total</td><td></td><td></td><td>${fmtHM(tot.sb)}</td><td>${tot.n}</td><td>${fmtHM(tot.ac)}</td></tr>
         </tbody></table></div>
         <div class="actions no-print">
-          <select id="sbMode" style="width:auto"><option value="semana" ${S.monthMode !== "dia" ? "selected" : ""}>Contar semanas inteiras (pelo sábado do mês)</option><option value="dia" ${S.monthMode === "dia" ? "selected" : ""}>Contar só os dias do mês</option></select>
+          ${admin ? `<select id="sbMode" style="width:auto"><option value="semana" ${S.monthMode !== "dia" ? "selected" : ""}>Contar semanas inteiras (pelo sábado do mês)</option><option value="dia" ${S.monthMode === "dia" ? "selected" : ""}>Contar só os dias do mês</option></select>` : ""}
           <button class="primary small" id="sbCopy">Copiar resumo</button>
           <button class="secondary small" id="sbCsv">Baixar CSV (resumo e acionamentos)</button>
         </div>
@@ -2178,7 +2217,7 @@
         <label class="check" style="margin-top:14px"><input type="checkbox" id="acAll" ${sbState.acAll ? "checked" : ""}> Mostrar acionamentos de todos os meses (sem marcar, a lista mostra só ${monthName(state.year, state.month)})</label>
         <div class="hr-scroll" style="margin-top:8px"><table class="hrsum sbacs"><thead><tr><th>Data</th><th>Colaborador</th><th>Início</th><th>Fim</th><th>Duração</th><th class="nm">Descrição</th><th></th></tr></thead><tbody>
           ${M.acs.length ? M.acs.map(a => `<tr><td>${sbState.acAll ? parse(a.date).toLocaleDateString("pt-BR") : dm(parse(a.date))}</td><td>${esc(pname(a.person))}</td><td>${esc(a.start)}</td><td>${esc(a.end)}</td><td><b>${fmtHM(acDur(a))}</b></td>
-            <td class="nm desc">${esc(a.desc || "")}</td><td style="white-space:nowrap"><button class="secondary small" data-acedit="${a.id}">Editar</button> <button class="danger small" data-acdel="${a.id}">×</button></td></tr>`).join("")
+            <td class="nm desc">${esc(a.desc || "")}${a.by ? `<div class="note" style="font-size:.72rem">lançado por ${esc(a.by)}</div>` : ""}</td><td style="white-space:nowrap">${admin ? `<button class="secondary small" data-acedit="${a.id}">Editar</button> <button class="danger small" data-acdel="${a.id}">×</button>` : ""}</td></tr>`).join("")
             : `<tr><td colspan="7" class="note">Nenhum acionamento ${sbState.acAll ? "lançado" : "lançado neste mês"}.</td></tr>`}
         </tbody></table></div>
       </div>
@@ -2190,7 +2229,8 @@
         </tbody></table></div>
       </details>
 
-      <details class="panel" id="sbHours" ${sbState.hoursOpen ? "open" : ""}>
+      ${!admin ? `<p class="note">Precisa corrigir ou excluir um acionamento? Peça para a Wanessa ou o Maycon.</p>` : ""}
+      <details class="panel ${admin ? "" : "hidden"}" id="sbHours" ${sbState.hoursOpen ? "open" : ""}>
         <summary><h2 style="display:inline">Horas de sobreaviso por dia</h2></summary>
         <p class="lead" style="margin-top:8px">Quantas horas de sobreaviso cada dia vale para o plantonista (o tempo fora do horário de funcionamento do NOC). A coluna “com férias” vale nas semanas em que alguém do plantão está de férias. Crie um período novo quando o horário mudar (ex.: dezembro).</p>
         <div class="grid3"><div><label>Feriado</label><select id="sbHolMode">
@@ -2224,6 +2264,43 @@
     const people = Object.keys(M.per).map(Number).sort((a, b) => pname(a).localeCompare(pname(b)));
     return { M, people };
   }
+  function sbSave(msg) {
+    if (!FB_ON) return saveConfig(msg);
+    if (!fb || !canSbAdmin()) return;
+    const { acion, ...rest } = sbData();
+    fb.saveSb(JSON.stringify(rest)).then(() => toast(msg)).catch(e => toast("Não foi possível salvar: " + (e.code || e.message)));
+    renderSB();
+  }
+  async function acSave(id, a, isNew) {
+    if (!FB_ON) {
+      const S = sbData();
+      if (isNew) S.acion.push(Object.assign({ id, by: user }, a)); else Object.assign(S.acion.find(x => x.id === id), a);
+      return saveConfig(isNew ? "Acionamento adicionado" : "Acionamento alterado");
+    }
+    const old = sbStore.acion.find(x => x.id === id) || {};
+    const { id: _ignore, ...base } = old;
+    const doc = Object.assign({}, base, a, isNew ? { by: user, byEmail: userEmail, createdAt: Date.now() } : { editedBy: user, editedAt: Date.now() });
+    try { await fb.acSet(id, doc); toast(isNew ? "Acionamento adicionado" : "Acionamento alterado"); }
+    catch (e) { toast("Não foi possível salvar o acionamento: " + (e.code || e.message)); }
+  }
+  async function acRemove(id) {
+    if (!FB_ON) { const S = sbData(); S.acion = S.acion.filter(x => x.id !== id); cfg.hr.sobreaviso.acion = S.acion; return saveConfig("Acionamento excluído"); }
+    try { await fb.acDel(id); toast("Acionamento excluído"); } catch (e) { toast("Não foi possível excluir: " + (e.code || e.message)); }
+  }
+  // Leva horas e acionamentos que estavam na Escala RH para o novo lugar (uma vez, ao entrar como administrador)
+  async function maybeMigrateSb() {
+    if (!FB_ON || !fb || !perm.master || !rhLoaded || !sbStore.cfgLoaded || !sbStore.acLoaded) return;
+    const old = cfg.hr && cfg.hr.sobreaviso;
+    if (!old || old.migrated) return;
+    try {
+      if (!sbStore.cfgExists) { const { acion, ...rest } = old; await fb.saveSb(JSON.stringify(rest)); }
+      for (const a of (old.acion || [])) if (!sbStore.acion.some(x => x.id === a.id)) {
+        const { id, ...rest } = a; await fb.acSet(id, Object.assign({ byEmail: userEmail }, rest));
+      }
+      cfg.hr.sobreaviso = { migrated: true };
+      saveConfig(false);
+    } catch (e) { console.warn("migração do sobreaviso", e); }
+  }
   function onSBClick(e) {
     const t = e.target.closest("button"); if (!t) return;
     const S = sbData();
@@ -2231,20 +2308,21 @@
       const a = { date: $("acDate").value, person: +$("acWho").value, start: $("acStart").value, end: $("acEnd").value, desc: $("acDesc").value.trim() };
       if (!a.date || !a.start || !a.end) return toast("Preencha data, início e fim");
       if (a.start === a.end) return toast("O início e o fim são iguais");
-      if (sbState.editId) Object.assign(S.acion.find(x => x.id === sbState.editId), a);
-      else S.acion.push(Object.assign({ id: "a" + Date.now().toString(36), by: user }, a));
+      if (sbState.editId && !canSbAdmin()) return toast("Só a administração pode alterar acionamentos");
+      const isNew = !sbState.editId, id = sbState.editId || "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const d = parse(a.date); state.year = YEARS.includes(d.getFullYear()) ? d.getFullYear() : state.year; state.month = d.getMonth();
-      saveConfig(sbState.editId ? "Acionamento alterado" : "Acionamento adicionado"); sbState.editId = null; renderViews(); return;
+      sbState.editId = null;
+      acSave(id, a, isNew).then(() => renderViews()); return;
     }
     if (t.id === "acCancel") { sbState.editId = null; renderSB(); return; }
-    if (t.dataset.acedit) { sbState.editId = t.dataset.acedit; renderSB(); $("acStart").focus(); return; }
-    if (t.dataset.acdel) { if (confirm("Excluir este acionamento?")) { S.acion = S.acion.filter(x => x.id !== t.dataset.acdel); saveConfig("Acionamento excluído"); } return; }
+    if (t.dataset.acedit) { if (!canSbAdmin()) return; sbState.editId = t.dataset.acedit; renderSB(); $("acStart").focus(); return; }
+    if (t.dataset.acdel) { if (!canSbAdmin()) return; if (confirm("Excluir este acionamento?")) acRemove(t.dataset.acdel); return; }
     if (t.id === "sbAddPer") {
       const last = clone([...S.periods].sort((a, b) => a.start.localeCompare(b.start)).pop());
       last.name = "Novo período"; last.start = iso(addDays(parse(last.start), 31));
-      S.periods.push(last); sbState.hoursOpen = true; saveConfig("Período criado"); return;
+      S.periods.push(last); sbState.hoursOpen = true; sbSave("Período criado"); return;
     }
-    if (t.dataset.sbdelper !== undefined) { if (confirm("Remover este período?")) { S.periods.splice(+t.dataset.sbdelper, 1); saveConfig("Período removido"); } return; }
+    if (t.dataset.sbdelper !== undefined) { if (confirm("Remover este período?")) { S.periods.splice(+t.dataset.sbdelper, 1); sbSave("Período removido"); } return; }
     if (t.id === "sbCopy" || t.id === "sbCsv") {
       const { M, people } = sbRows();
       const rows = [["Colaborador", "Semanas de plantão", "Horas de sobreaviso", "Acionamentos", "Tempo de acionamento"]]
@@ -2260,11 +2338,11 @@
     const t = e.target, S = sbData();
     if (t.id === "acDate" && t.value && !sbState.editId) { const w = sbDay(parse(t.value)).who[0]; if (w !== undefined) $("acWho").value = w; return; }
     if (t.id === "acStart" || t.id === "acEnd") return sbPreview();
-    if (t.id === "sbMode") { S.monthMode = t.value; return saveConfig("Atualizado"); }
+    if (t.id === "sbMode") { S.monthMode = t.value; return sbSave("Atualizado"); }
     if (t.id === "acAll") { sbState.acAll = t.checked; return renderSB(); }
-    if (t.id === "sbHolMode") { S.holidayMode = t.value; sbState.hoursOpen = true; return saveConfig("Atualizado"); }
-    if (t.dataset.sbh) { const [pi, mode, d] = t.dataset.sbh.split("|"); S.periods[+pi][mode][d] = t.value.trim(); sbState.hoursOpen = true; return saveConfig("Horário atualizado"); }
-    if (t.dataset.sbper) { const [pi, f] = t.dataset.sbper.split("|"); S.periods[+pi][f] = t.value; sbState.hoursOpen = true; return saveConfig("Período atualizado"); }
+    if (t.id === "sbHolMode") { S.holidayMode = t.value; sbState.hoursOpen = true; return sbSave("Atualizado"); }
+    if (t.dataset.sbh) { const [pi, mode, d] = t.dataset.sbh.split("|"); S.periods[+pi][mode][d] = t.value.trim(); sbState.hoursOpen = true; return sbSave("Horário atualizado"); }
+    if (t.dataset.sbper) { const [pi, f] = t.dataset.sbper.split("|"); S.periods[+pi][f] = t.value; sbState.hoursOpen = true; return sbSave("Período atualizado"); }
   }
 
   // ---------- Login ----------
@@ -2304,8 +2382,8 @@
       : `<button class="ghost small" id="loginBtn">Entrar</button>`;
     $("tabConfigBtn").classList.toggle("hidden", !perm.edit);
     $("tabRhBtn").classList.toggle("hidden", !perm.rh);
-    $("tabSbBtn").classList.toggle("hidden", !perm.rh);
-    if ((!perm.edit && state.tab === "config") || (!perm.rh && (state.tab === "rh" || state.tab === "sobre"))) setTab("painel");
+    $("tabSbBtn").classList.toggle("hidden", !canSb());
+    if ((!perm.edit && state.tab === "config") || (!perm.rh && state.tab === "rh") || (!canSb() && state.tab === "sobre")) setTab(canSb() && user ? "sobre" : "painel");
   }
   $("userbox").addEventListener("click", e => {
     if (e.target.id === "loginBtn") {
@@ -2357,7 +2435,7 @@
       try {
         await fb.signIn(email, p);
         $("loginModal").classList.add("hidden"); $("lgPass").value = ""; $("lgErr").textContent = "";
-        setShow(false); setTab("config"); toast("Bem-vindo(a), " + u.split("@")[0]);
+        setShow(false); setTab(MASTERS.includes(email.toLowerCase()) ? "config" : "sobre"); toast("Bem-vindo(a), " + u.split("@")[0]);
       } catch (e) {
         $("lgErr").textContent = /network/.test(e.code || "") ? "Sem conexão com o Firebase." : /too-many/.test(e.code || "") ? "Muitas tentativas. Aguarde alguns minutos." : "Usuário ou senha incorretos.";
       }
