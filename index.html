@@ -596,7 +596,9 @@
           await authM.signOut(sa);
         },
         saveUsers: list => fsM.setDoc(fsM.doc(db, "escala", "usuarios"), { list, emails: list.map(x => x.email), rhEmails: list.filter(x => x.rh).map(x => x.email),
-          editorEmails: list.filter(x => (x.role || "editor") === "editor").map(x => x.email), updatedBy: user, updatedAt: fsM.serverTimestamp() }),
+          editorEmails: list.filter(x => (x.role || "editor") === "editor").map(x => x.email),
+          pessoas: Object.fromEntries(list.filter(x => x.person !== undefined && x.person !== null && x.person !== "").map(x => [x.email, +x.person])),
+          updatedBy: user, updatedAt: fsM.serverTimestamp() }),
         sbRef: fsM.doc(db, "escala", "sobreaviso"),
         saveSb: data => fsM.setDoc(fsM.doc(db, "escala", "sobreaviso"), { data, updatedBy: user, updatedAt: fsM.serverTimestamp() }),
         acSet: (id, obj) => fsM.setDoc(fsM.doc(db, "acionamentos", id), obj),
@@ -1039,11 +1041,13 @@
         ${!access.loaded ? `<p class="note">Carregando usuários…</p>` : access.list.length ? `<ul class="list">${access.list.map((x, i) => `<li>
           <span><b>${esc(x.user)}</b> <span class="note">— criado por ${esc(x.createdBy || "—")}${x.createdAt ? " em " + fmt(x.createdAt) : ""}</span></span>
           <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><select data-urole="${i}" style="width:auto;padding:5px 8px"><option value="operador" ${x.role === "operador" ? "selected" : ""}>Operador</option><option value="editor" ${(x.role || "editor") === "editor" ? "selected" : ""}>Editor</option></select>
+          <select data-uperson="${i}" style="width:auto;padding:5px 8px" title="Colaborador desse usuário (nome usado nos acionamentos)"><option value="">— colaborador —</option>${cfg.people.map((p, pi) => `<option value="${pi}" ${String(x.person) === String(pi) ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
           <label class="check" style="margin:0"><input type="checkbox" data-urh="${i}" ${x.rh ? "checked" : ""}> Escala RH</label>
           <button class="danger small" data-udel="${i}">Remover acesso</button></span></li>`).join("")}</ul>` : `<p class="note">Nenhum usuário adicional.</p>`}
         <div class="grid4" style="margin-top:12px">
           <div><label>Novo usuário</label><input id="nuUser" placeholder="ex.: joao" autocomplete="off"></div>
           <div><label>Senha (mín. 6 caracteres)</label><div class="pwd"><input type="password" id="nuPass" autocomplete="new-password"><button type="button" class="eye" data-eye="nuPass">👁</button></div></div>
+          <div><label>Colaborador</label><select id="nuPerson"><option value="">— selecione —</option>${cfg.people.map((p, pi) => `<option value="${pi}">${esc(p)}</option>`).join("")}</select></div>
           <div><label>Perfil</label><select id="nuRole"><option value="operador">Operador (só inclui acionamentos)</option><option value="editor">Editor (configura a escala)</option></select>
             <label class="check" style="margin-top:6px"><input type="checkbox" id="nuRh"> Acesso à Escala RH</label></div>
           <div style="display:flex;align-items:flex-end"><button class="primary small" id="nuAdd">Criar usuário</button></div>
@@ -1051,6 +1055,11 @@
       </div>
       ${mine.replace('style="border:0;margin-top:0;padding-top:0"', "")}`;
   }
+  document.addEventListener("input", e => {
+    if (e.target.id !== "nuUser" || !$("nuPerson") || $("nuPerson").dataset.touched) return;
+    const g = guessPerson(e.target.value); $("nuPerson").value = g >= 0 ? String(g) : "";
+  });
+  document.addEventListener("change", e => { if (e.target.id === "nuPerson") e.target.dataset.touched = "1"; });
   async function onUsersClick(t) {
     if (t.dataset.eye) { const i = $(t.dataset.eye); i.type = i.type === "password" ? "text" : "password"; t.classList.toggle("on", i.type === "text"); return true; }
     if (t.id === "myPassBtn") {
@@ -1080,7 +1089,10 @@
         }
       }
       try {
-        await fb.saveUsers(access.list.concat([{ user: u, email, rh, role: $("nuRole") ? $("nuRole").value : "operador", createdBy: user, createdAt: Date.now() }]));
+        const role = $("nuRole") ? $("nuRole").value : "operador";
+        let person = $("nuPerson") ? $("nuPerson").value : "";
+        if (person === "") { const g = guessPerson(u); if (g >= 0) person = String(g); }
+        await fb.saveUsers(access.list.concat([{ user: u, email, rh, role, person: person === "" ? null : +person, createdBy: user, createdAt: Date.now() }]));
         toast(existed ? `Acesso devolvido a ${u} (a conta já existia, a senha antiga continua valendo)` : `Usuário ${u} criado`);
       } catch (e) { toast("Conta criada, mas não consegui salvar a lista: " + (e.code || e.message)); }
       return true;
@@ -1252,6 +1264,11 @@
       const i = +(t.dataset.lumaster ?? t.dataset.lurh), x = localUsers[i];
       if (t.dataset.lumaster !== undefined) x.master = t.checked; else x.rh = t.checked;
       saveLocalUsers(localUsers); perm = localPerm(user); renderUser(); renderConfig(); renderHR(); toast("Permissão atualizada");
+      return;
+    }
+    if (t.dataset.uperson !== undefined && fb) {
+      const list = access.list.map((x, i) => i === +t.dataset.uperson ? { ...x, person: t.value === "" ? null : +t.value } : x);
+      fb.saveUsers(list).then(() => toast("Colaborador do usuário atualizado")).catch(err => toast("Não foi possível salvar: " + (err.code || err.message)));
       return;
     }
     if (t.dataset.urole !== undefined && fb) {
@@ -2109,6 +2126,14 @@
   const sbStore = { cfg: null, acion: [], cfgLoaded: false, cfgExists: false, acLoaded: false };
   const canSb = () => perm.sb !== undefined ? perm.sb : perm.rh;
   const canSbAdmin = () => perm.sbAdmin !== undefined ? perm.sbAdmin : perm.edit;
+  // Operador lança acionamento sempre no próprio nome (colaborador ligado ao usuário pela administração)
+  const isOperador = () => FB_ON && !!user && !perm.master && !canSbAdmin();
+  function myPerson() {
+    const me = access.list.find(x => x.email === userEmail);
+    return me && me.person !== undefined && me.person !== "" && me.person !== null && cfg.people[+me.person] !== undefined ? +me.person : null;
+  }
+  const normName = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  const guessPerson = u => { const n = normName(u); if (!n) return -1; return cfg.people.findIndex(p => normName(p) === n || normName(String(p).split(/[\s/]/)[0]) === n); };
   function sbData() {
     let S;
     if (FB_ON) { S = (sbStore.cfg ||= defaultSB()); S.acion = sbStore.acion; }
@@ -2182,7 +2207,8 @@
     const tot = people.reduce((t, p) => ({ sb: t.sb + M.per[p].sb, n: t.n + M.per[p].n, ac: t.ac + M.per[p].ac }), { sb: 0, n: 0, ac: 0 });
     const editing = S.acion.find(a => a.id === sbState.editId);
     const defDate = editing ? editing.date : iso(today.getFullYear() === state.year && today.getMonth() === state.month ? today : new Date(state.year, state.month, 1, 12));
-    const defWho = editing ? editing.person : (sbDay(parse(defDate)).who[0] ?? 0);
+    const op = isOperador(), mine = op ? myPerson() : null;
+    const defWho = editing ? editing.person : op ? mine : (sbDay(parse(defDate)).who[0] ?? 0);
     box.innerHTML = `
       <div class="panel">
         <h2>Resumo de ${monthName(state.year, state.month)} de ${state.year}</h2>
@@ -2204,7 +2230,10 @@
         <p class="lead">Lance cada chamado do grupo REGISTRO - CHAMADOS SOBREAVISO. Ao escolher a data, o colaborador já vem preenchido com o plantonista daquele dia. Se o fim for menor que o início, conta como virada da meia-noite. Os acionamentos entram no mês da data deles.</p>
         <div class="grid4 sbform">
           <div><label>Data</label><input type="date" id="acDate" value="${defDate}"></div>
-          <div><label>Colaborador</label><select id="acWho">${personOptions(defWho)}</select></div>
+          <div><label>Colaborador</label>${op
+            ? (mine === null ? `<div class="note" style="color:#a62d36;padding-top:8px">Seu usuário ainda não está ligado a um colaborador. Peça para a Wanessa ou o Maycon.</div>`
+              : `<select id="acWho" disabled><option value="${mine}">${esc(pname(mine))}</option></select>`)
+            : `<select id="acWho">${personOptions(defWho)}</select>`}</div>
           <div><label>Início</label><input type="time" id="acStart" value="${editing ? editing.start : ""}"></div>
           <div><label>Fim</label><input type="time" id="acEnd" value="${editing ? editing.end : ""}"></div>
         </div>
@@ -2305,7 +2334,8 @@
     const t = e.target.closest("button"); if (!t) return;
     const S = sbData();
     if (t.id === "acSave") {
-      const a = { date: $("acDate").value, person: +$("acWho").value, start: $("acStart").value, end: $("acEnd").value, desc: $("acDesc").value.trim() };
+      if (isOperador() && myPerson() === null) return toast("Seu usuário não está ligado a um colaborador. Peça para a Wanessa ou o Maycon.");
+      const a = { date: $("acDate").value, person: isOperador() ? myPerson() : +$("acWho").value, start: $("acStart").value, end: $("acEnd").value, desc: $("acDesc").value.trim() };
       if (!a.date || !a.start || !a.end) return toast("Preencha data, início e fim");
       if (a.start === a.end) return toast("O início e o fim são iguais");
       if (sbState.editId && !canSbAdmin()) return toast("Só a administração pode alterar acionamentos");
@@ -2336,7 +2366,7 @@
   }
   function onSBChange(e) {
     const t = e.target, S = sbData();
-    if (t.id === "acDate" && t.value && !sbState.editId) { const w = sbDay(parse(t.value)).who[0]; if (w !== undefined) $("acWho").value = w; return; }
+    if (t.id === "acDate" && t.value && !sbState.editId && !isOperador()) { const w = sbDay(parse(t.value)).who[0]; if (w !== undefined) $("acWho").value = w; return; }
     if (t.id === "acStart" || t.id === "acEnd") return sbPreview();
     if (t.id === "sbMode") { S.monthMode = t.value; return sbSave("Atualizado"); }
     if (t.id === "acAll") { sbState.acAll = t.checked; return renderSB(); }
